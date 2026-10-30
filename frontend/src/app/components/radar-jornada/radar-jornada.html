@@ -1,0 +1,45 @@
+@if (radar(); as r) {
+  <section class="mb-6">
+    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">📡 Radar de la Jornada</h2>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-400">⚽ Mayor media goleadora</p>
+        <div class="mt-2 flex items-center gap-2">
+          <app-team-crest [logoUrl]="r.mayorMediaGoleadora.teamLogo" [teamName]="r.mayorMediaGoleadora.teamName" size="md" />
+          <div>
+            <p class="text-sm font-semibold text-gray-900">{{ r.mayorMediaGoleadora.teamName }}</p>
+            <p class="text-lg font-bold text-emerald-600">{{ r.mayorMediaGoleadora.valor }} goles/partido</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-400">📈 Tendencia más fuerte</p>
+        <div class="mt-2 flex items-center gap-2">
+          <app-team-crest [logoUrl]="r.tendenciaMasFuerte.teamLogo" [teamName]="r.tendenciaMasFuerte.teamName" size="md" />
+          <div>
+            <p class="text-sm font-semibold text-gray-900">{{ r.tendenciaMasFuerte.teamName }}</p>
+            <p class="text-lg font-bold text-sky-600">{{ r.tendenciaMasFuerte.valor }}% <span class="text-xs font-medium text-gray-500">{{ r.tendenciaMasFuerte.mercado }}</span></p>
+          </div>
+        </div>
+      </div>
+
+      @if (r.mayorRiesgoTarjetas; as t) {
+        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-400">🟨 Mayor riesgo de tarjetas</p>
+          <div class="mt-2 flex items-center gap-2">
+            <app-team-crest [logoUrl]="t.teamLogo" [teamName]="t.teamName" size="md" />
+            <div>
+              <p class="text-sm font-semibold text-gray-900">{{ t.teamName }}</p>
+              <p class="text-lg font-bold text-amber-600">{{ t.valor }} tarjetas/partido</p>
+            </div>
+          </div>
+        </div>
+      } @else {
+        <div class="flex items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-center text-xs text-gray-400">
+          Sin datos de tarjetas todavía para los equipos del día.
+        </div>
+      }
+    </div>
+  </section>
+}

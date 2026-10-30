@@ -1,0 +1,63 @@
+@if (teamId() === null) {
+  <section class="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400 shadow-sm">
+    Selecciona un equipo en la tabla de arriba para ver su calendario de partidos.
+  </section>
+} @else if (schedule(); as data) {
+  <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div class="border-b border-gray-200 p-5">
+      <h3 class="text-lg font-semibold text-gray-900">📅 Calendario · {{ data.teamName }}</h3>
+      <p class="text-sm text-gray-500">Próximos encuentros y registro de partidos jugados en la temporada</p>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 p-5 md:grid-cols-2">
+      <div>
+        <h4 class="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
+          Próximos encuentros ({{ data.proximos.length }})
+        </h4>
+        <ul class="max-h-80 space-y-2 overflow-y-auto pr-1">
+          @for (m of data.proximos; track m.fixtureId) {
+            <li class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+              <span class="flex items-center gap-2 text-gray-800">
+                <app-team-crest [logoUrl]="m.isHome ? data.teamLogo : m.opponentLogo" [teamName]="m.isHome ? data.teamName : m.opponentName" size="sm" />
+                {{ m.isHome ? data.teamName : m.opponentName }}
+                <span class="text-gray-400">vs</span>
+                <app-team-crest [logoUrl]="m.isHome ? m.opponentLogo : data.teamLogo" [teamName]="m.isHome ? m.opponentName : data.teamName" size="sm" />
+                {{ m.isHome ? m.opponentName : data.teamName }}
+              </span>
+              <span class="shrink-0 pl-3 text-xs text-gray-500">{{ m.date | date: 'd MMM, HH:mm' }}</span>
+            </li>
+          } @empty {
+            <li class="text-sm text-gray-400">No hay más partidos programados.</li>
+          }
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
+          Partidos jugados ({{ data.pasados.length }})
+        </h4>
+        <ul class="max-h-80 space-y-2 overflow-y-auto pr-1">
+          @for (m of data.pasados; track m.fixtureId) {
+            <li class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+              <span class="flex items-center gap-2 text-gray-800">
+                <span class="h-2 w-2 shrink-0 rounded-full" [ngClass]="resultDotClass(m.result)"></span>
+                <app-team-crest [logoUrl]="m.isHome ? data.teamLogo : m.opponentLogo" [teamName]="m.isHome ? data.teamName : m.opponentName" size="sm" />
+                {{ m.isHome ? data.teamName : m.opponentName }}
+                {{ m.homeGoals }}-{{ m.awayGoals }}
+                <app-team-crest [logoUrl]="m.isHome ? m.opponentLogo : data.teamLogo" [teamName]="m.isHome ? m.opponentName : data.teamName" size="sm" />
+                {{ m.isHome ? m.opponentName : data.teamName }}
+              </span>
+              <span class="shrink-0 pl-3 text-xs text-gray-500">{{ m.date | date: 'd MMM' }}</span>
+            </li>
+          } @empty {
+            <li class="text-sm text-gray-400">Todavía no jugó partidos esta temporada.</li>
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+} @else {
+  <section class="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400 shadow-sm">
+    No se pudo cargar el calendario de este equipo.
+  </section>
+}

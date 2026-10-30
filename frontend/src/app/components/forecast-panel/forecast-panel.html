@@ -1,0 +1,118 @@
+<section class="rounded-xl border border-gray-200 bg-white shadow-sm">
+  <div
+    class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gradient-to-r from-violet-50 to-white px-5 py-4"
+  >
+    <div>
+      <h3 class="text-lg font-bold text-gray-900">🔮 {{ titulo() }}</h3>
+      <p class="text-xs text-gray-500">
+        {{ competitionFilter.selected()?.nombre }} · 3 mejores opciones fijas por partido (estadísticas de
+        apuestas.db) + análisis generado una vez con IA
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex gap-1 rounded-full bg-gray-100 p-1 text-xs">
+        <button
+          type="button"
+          (click)="seleccionarDia('hoy')"
+          class="rounded-full px-3 py-1.5 font-semibold transition-colors"
+          [ngClass]="dia() === 'hoy' ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-600 hover:bg-white'"
+        >
+          Hoy
+        </button>
+        <button
+          type="button"
+          (click)="seleccionarDia('manana')"
+          class="rounded-full px-3 py-1.5 font-semibold transition-colors"
+          [ngClass]="dia() === 'manana' ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-600 hover:bg-white'"
+        >
+          Mañana
+        </button>
+        <button
+          type="button"
+          (click)="seleccionarDia('semana')"
+          class="rounded-full px-3 py-1.5 font-semibold transition-colors"
+          [ngClass]="dia() === 'semana' ? 'bg-violet-600 text-white shadow-sm' : 'text-gray-600 hover:bg-white'"
+        >
+          📅 Semana
+        </button>
+      </div>
+
+      <button
+        type="button"
+        (click)="cargar(true)"
+        [disabled]="loading()"
+        class="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-violet-600 ring-1 ring-violet-200 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        🔄 Regenerar
+      </button>
+    </div>
+  </div>
+
+  <div class="max-h-[70vh] overflow-y-auto p-5">
+    @if (loading()) {
+      <div class="flex flex-col items-center gap-3 py-10 text-sm text-gray-500">
+        <span class="h-8 w-8 animate-spin rounded-full border-2 border-violet-300 border-t-violet-600"></span>
+        {{ mensajeCarga() }}
+      </div>
+    } @else if (error()) {
+      <p class="py-6 text-center text-sm text-rose-600">{{ error() }}</p>
+      <div class="flex justify-center">
+        <button
+          type="button"
+          (click)="cargar()"
+          class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+        >
+          Reintentar
+        </button>
+      </div>
+    } @else if (forecasts(); as data) {
+      @if (data.length === 0) {
+        <p class="py-10 text-center text-sm text-gray-400">
+          No hay partidos programados para {{ etiquetaPeriodo() }}.
+        </p>
+      } @else {
+        <div class="mb-3">
+          <span class="text-xs text-gray-500">{{ data.length }} partido(s) para {{ etiquetaPeriodo() }}</span>
+        </div>
+        <ul class="flex flex-col gap-4">
+          @for (f of data; track f.fixtureId) {
+            <li class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span class="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <app-team-crest [logoUrl]="f.homeTeamLogo" [teamName]="f.homeTeamName" size="sm" />
+                  {{ f.homeTeamName }}
+                  <span class="text-gray-400">vs</span>
+                  <app-team-crest [logoUrl]="f.awayTeamLogo" [teamName]="f.awayTeamName" size="sm" />
+                  {{ f.awayTeamName }}
+                </span>
+                <span class="text-xs text-gray-500">
+                  {{ f.date | date: (dia() === 'semana' ? "EEE d MMM, HH:mm" : 'HH:mm') }}
+                </span>
+              </div>
+              @if (f.opciones.length > 0) {
+                <div class="mb-3 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+                  @for (o of f.opciones; track o.mercado) {
+                    <span
+                      class="rounded-lg px-2.5 py-1.5 text-xs font-bold ring-1"
+                      [ngClass]="
+                        o.solido ? 'bg-violet-50 text-violet-700 ring-violet-200' : 'bg-amber-50 text-amber-700 ring-amber-200'
+                      "
+                    >
+                      {{ o.recomendacion }}
+                      <span class="font-normal opacity-80">· {{ o.probabilidad !== null ? o.probabilidad + '%' : '—' }}</span>
+                    </span>
+                  }
+                </div>
+              }
+              <p class="whitespace-pre-line text-sm leading-relaxed text-gray-700">{{ f.informe }}</p>
+              <p class="mt-2 text-xs text-gray-400">
+                Análisis estadístico automatizado, no constituye garantía de resultado.
+              </p>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </div>
+</section>

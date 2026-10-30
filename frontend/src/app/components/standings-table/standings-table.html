@@ -1,0 +1,256 @@
+@if (compact()) {
+  <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div class="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+      <h2 class="text-sm font-semibold text-gray-900">🏆 Tabla de Posiciones</h2>
+      <select
+        [ngModel]="selectedSeason()"
+        (ngModelChange)="onSeasonChange($event)"
+        class="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:border-emerald-500 focus:outline-none"
+      >
+        @for (s of seasons(); track s) {
+          <option [value]="s">{{ s }}-{{ s + 1 }}</option>
+        }
+      </select>
+    </div>
+
+    <table class="w-full text-left text-xs">
+      <thead class="text-[10px] uppercase tracking-wide text-gray-400">
+        <tr>
+          <th class="px-2 py-2 text-center">#</th>
+          <th class="px-2 py-2">Equipo</th>
+          <th class="px-2 py-2 text-center">PJ</th>
+          <th class="px-2 py-2 text-center">Pts</th>
+          <th class="px-2 py-2 text-center">Últimos 5</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        @for (equipo of standings(); track equipo.teamId) {
+          <tr
+            class="cursor-pointer transition-colors hover:bg-gray-50"
+            [ngClass]="[
+              rowZoneClass(equipo.position, standings().length),
+              selectedTeamId() === equipo.teamId ? 'bg-emerald-50/60' : '',
+            ]"
+            (click)="selectTeam(equipo.teamId)"
+          >
+            <td class="px-2 py-2 text-center text-gray-400">{{ equipo.position }}</td>
+            <td class="px-2 py-2">
+              <button
+                type="button"
+                (click)="openProfile(equipo.teamId, $event)"
+                class="flex items-center gap-1.5 hover:underline"
+                title="Ver perfil avanzado"
+              >
+                <app-team-crest [logoUrl]="equipo.teamLogo" [teamName]="equipo.teamName" size="sm" />
+                <span class="truncate font-medium text-gray-900">{{ equipo.teamName }}</span>
+              </button>
+            </td>
+            <td class="px-2 py-2 text-center text-gray-600">{{ equipo.played }}</td>
+            <td class="px-2 py-2 text-center text-sm font-bold text-gray-900">{{ equipo.points }}</td>
+            <td class="px-2 py-2">
+              <div class="flex items-center justify-center gap-1">
+                @for (m of equipo.last5; track m.fixtureId) {
+                  <div class="group/dot relative">
+                    <span class="block h-2 w-2 rounded-full ring-1 ring-black/10" [ngClass]="resultDotClass(m.result)"></span>
+                    <div
+                      class="invisible absolute bottom-full right-0 z-10 mb-2 w-max max-w-56 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-left text-xs text-gray-100 opacity-0 shadow-xl transition-opacity group-hover/dot:visible group-hover/dot:opacity-100"
+                    >
+                      <p class="font-semibold text-white">{{ matchSummary(equipo, m) }}</p>
+                      <p class="text-gray-400">{{ m.date | date: "d MMM y, HH:mm" }}</p>
+                      <div class="mt-1.5 flex gap-3 border-t border-gray-700 pt-1.5 text-gray-200">
+                        <span>🚩 {{ m.homeCorners ?? '—' }}-{{ m.awayCorners ?? '—' }}</span>
+                        <span>🟨 {{ m.homeCards ?? '—' }}-{{ m.awayCards ?? '—' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                } @empty {
+                  <span class="text-gray-300">—</span>
+                }
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5" class="px-4 py-6 text-center text-gray-400">Sin datos para esta temporada.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <div class="flex items-center gap-3 border-t border-gray-200 px-4 py-2 text-[10px] text-gray-400">
+      <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm border-l-2 border-emerald-500"></span>Champions</span>
+      <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-sm border-l-2 border-rose-500"></span>Descenso</span>
+      <span>· clic para ver ficha</span>
+    </div>
+  </section>
+} @else {
+  <section class="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <!-- Header + selector de temporada -->
+    <div class="flex flex-col gap-4 border-b border-gray-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-900">🏆 Tabla de Posiciones</h2>
+        <p class="text-sm text-gray-500">Premier League · calculada a partir de apuestas.db</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-500" for="season-select">Temporada</label>
+        <select
+          id="season-select"
+          [ngModel]="selectedSeason()"
+          (ngModelChange)="onSeasonChange($event)"
+          class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none"
+        >
+          @for (s of seasons(); track s) {
+            <option [value]="s">{{ s }}-{{ s + 1 }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+          <tr>
+            <th class="px-3 py-3 text-center">#</th>
+            <th class="px-5 py-3">Equipo</th>
+            <th class="px-3 py-3 text-center">PJ</th>
+            <th class="px-3 py-3 text-center">PG</th>
+            <th class="px-3 py-3 text-center">PE</th>
+            <th class="px-3 py-3 text-center">PP</th>
+            <th class="px-3 py-3 text-center">GF</th>
+            <th class="px-3 py-3 text-center">GC</th>
+            <th class="px-3 py-3 text-center">DG</th>
+            <th class="px-4 py-3 text-center">PTS</th>
+            <th class="px-4 py-3 text-center">Tendencia</th>
+            <th class="px-4 py-3 text-center">Últimos 5</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          @for (equipo of standings(); track equipo.teamId) {
+            <tr
+              class="cursor-pointer transition-colors hover:bg-gray-50"
+              [ngClass]="[
+                rowZoneClass(equipo.position, standings().length),
+                selectedTeamId() === equipo.teamId ? 'bg-emerald-50/60' : '',
+              ]"
+              (click)="selectTeam(equipo.teamId)"
+            >
+              <td class="px-3 py-3 text-center text-gray-400">{{ equipo.position }}</td>
+              <td class="px-5 py-3">
+                <button
+                  type="button"
+                  (click)="openProfile(equipo.teamId, $event)"
+                  class="flex items-center gap-2.5 hover:underline"
+                  title="Ver perfil avanzado"
+                >
+                  <app-team-crest [logoUrl]="equipo.teamLogo" [teamName]="equipo.teamName" size="sm" />
+                  <span class="font-medium text-gray-900">{{ equipo.teamName }}</span>
+                </button>
+              </td>
+              <td class="px-3 py-3 text-center text-gray-600">{{ equipo.played }}</td>
+              <td class="px-3 py-3 text-center text-gray-600">{{ equipo.won }}</td>
+              <td class="px-3 py-3 text-center text-gray-600">{{ equipo.drawn }}</td>
+              <td class="px-3 py-3 text-center text-gray-600">{{ equipo.lost }}</td>
+              <td class="px-3 py-3 text-center text-gray-600">{{ equipo.goalsFor }}</td>
+              <td class="px-3 py-3 text-center text-gray-600">{{ equipo.goalsAgainst }}</td>
+              <td class="px-3 py-3 text-center text-gray-600">
+                {{ equipo.goalDiff > 0 ? '+' + equipo.goalDiff : equipo.goalDiff }}
+              </td>
+              <td class="px-4 py-3 text-center text-base font-bold text-gray-900">{{ equipo.points }}</td>
+              <td class="px-4 py-3">
+                <div class="flex w-28 flex-col gap-1.5">
+                  <div class="flex items-center gap-2" title="Goles a favor por partido: {{ equipo.goalsForAvg }}">
+                    <span class="w-4 shrink-0 text-[10px]">⚽</span>
+                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        class="h-full rounded-full bg-emerald-500"
+                        [style.width.%]="trendWidth(equipo.goalsForAvg, maxTrend().goals)"
+                      ></div>
+                    </div>
+                  </div>
+                  <div
+                    class="flex items-center gap-2"
+                    title="Córners a favor por partido: {{ equipo.cornersAvg ?? 'sin datos' }}"
+                  >
+                    <span class="w-4 shrink-0 text-[10px]">🚩</span>
+                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        class="h-full rounded-full bg-sky-500"
+                        [style.width.%]="trendWidth(equipo.cornersAvg, maxTrend().corners)"
+                      ></div>
+                    </div>
+                  </div>
+                  <div
+                    class="flex items-center gap-2"
+                    title="Tarjetas por partido: {{ equipo.cardsAvg ?? 'sin datos' }}"
+                  >
+                    <span class="w-4 shrink-0 text-[10px]">🟨</span>
+                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        class="h-full rounded-full bg-amber-400"
+                        [style.width.%]="trendWidth(equipo.cardsAvg, maxTrend().cards)"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center justify-center gap-1.5">
+                  @for (m of equipo.last5; track m.fixtureId) {
+                    <div class="group/dot relative">
+                      <span
+                        class="block h-2.5 w-2.5 rounded-full ring-1 ring-black/10"
+                        [ngClass]="resultDotClass(m.result)"
+                      ></span>
+                      <div
+                        class="invisible absolute bottom-full left-1/2 z-10 mb-2 w-max max-w-56 -translate-x-1/2 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-left text-xs text-gray-100 opacity-0 shadow-xl transition-opacity group-hover/dot:visible group-hover/dot:opacity-100"
+                      >
+                        <p class="font-semibold text-white">{{ matchSummary(equipo, m) }}</p>
+                        <p class="text-gray-400">{{ m.date | date: "d MMM y, HH:mm" }}</p>
+                        <div class="mt-1.5 flex gap-3 border-t border-gray-700 pt-1.5 text-gray-200">
+                          <span title="Córners (local-visita)">🚩 {{ m.homeCorners ?? '—' }}-{{ m.awayCorners ?? '—' }}</span>
+                          <span title="Tarjetas (local-visita)">🟨 {{ m.homeCards ?? '—' }}-{{ m.awayCards ?? '—' }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  } @empty {
+                    <span class="text-xs text-gray-300">—</span>
+                  }
+                </div>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="12" class="px-5 py-8 text-center text-gray-400">
+                No hay datos de posiciones para esta temporada.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Leyenda -->
+    <div class="flex flex-wrap items-center gap-4 border-t border-gray-200 bg-gray-50/60 p-4 text-xs text-gray-500">
+      <span class="flex items-center gap-2">
+        <span class="h-3 w-3 rounded-sm border-l-4 border-emerald-500 bg-emerald-50"></span>
+        Zona de Champions League (1-4)
+      </span>
+      <span class="flex items-center gap-2">
+        <span class="h-3 w-3 rounded-sm border-l-4 border-rose-500 bg-rose-50"></span>
+        Zona de descenso
+      </span>
+      <span class="flex items-center gap-2">
+        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+        Victoria
+        <span class="h-2.5 w-2.5 rounded-full bg-gray-400"></span>
+        Empate
+        <span class="h-2.5 w-2.5 rounded-full bg-rose-500"></span>
+        Derrota
+      </span>
+      <span class="flex items-center gap-1.5">⚽🚩🟨 Tendencia = promedio por partido vs. el máximo de la temporada</span>
+      <span class="text-gray-400">· Haz clic en un equipo para ver su ficha y calendario</span>
+    </div>
+  </section>
+}

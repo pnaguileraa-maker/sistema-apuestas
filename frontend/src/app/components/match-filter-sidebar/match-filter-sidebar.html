@@ -1,0 +1,60 @@
+<aside class="flex w-full flex-col gap-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm lg:w-56">
+  <div>
+    <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Estado</h3>
+    <ul class="flex flex-col gap-1">
+      @for (e of estados; track e.value) {
+        <li>
+          <button
+            type="button"
+            (click)="filters.setEstado(e.value)"
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+            [ngClass]="
+              filters.estado() === e.value
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                : 'text-gray-600 hover:bg-gray-50'
+            "
+          >
+            <span>{{ e.icon }}</span>
+            {{ e.label }}
+          </button>
+        </li>
+      }
+    </ul>
+  </div>
+
+  <div>
+    <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Competición</h3>
+    <ul class="flex flex-col gap-1">
+      <li>
+        <button
+          type="button"
+          (click)="filters.setCompeticion(null)"
+          class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+          [ngClass]="
+            filters.competicionId() === null
+              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+              : 'text-gray-600 hover:bg-gray-50'
+          "
+        >
+          🌐 Todas
+        </button>
+      </li>
+      @for (c of competiciones(); track c.id) {
+        <li>
+          <button
+            type="button"
+            (click)="filters.setCompeticion(c.id)"
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+            [ngClass]="
+              filters.competicionId() === c.id
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                : 'text-gray-600 hover:bg-gray-50'
+            "
+          >
+            🏆 {{ c.nombre }}
+          </button>
+        </li>
+      }
+    </ul>
+  </div>
+</aside>

@@ -1,0 +1,36 @@
+<div class="min-h-screen bg-gray-50 px-6 py-8">
+  <div class="mx-auto max-w-7xl">
+    <!-- Header -->
+    <header
+      class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-6 py-4 shadow-sm"
+    >
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🏠</span>
+        <div>
+          <h1 class="text-base font-bold leading-tight text-gray-900">Inicio · Calendario Semanal</h1>
+          <p class="text-xs text-gray-500">Champions League + Premier League · Scout Pick embebido por partido</p>
+        </div>
+      </div>
+
+      <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+        🟢 Datos en vivo
+      </span>
+    </header>
+
+    <!-- Radar de la jornada (hoy) -->
+    <app-radar-jornada [radar]="radarHoy()?.radar ?? null" />
+
+    <!-- Calendario semanal (Champions League priorizada) + filtros -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[224px_1fr]">
+      <app-match-filter-sidebar />
+      <app-weekly-calendar />
+    </div>
+
+    <!-- Pronósticos con IA: sección fija, siempre visible (no es un modal) -->
+    <div class="mt-6">
+      <app-forecast-panel />
+    </div>
+  </div>
+
+  <app-team-popup />
+</div>

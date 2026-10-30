@@ -1,0 +1,12 @@
+.env
+.claude/
+__pycache__/
+*.pyc
+backend/venv/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# apuestas.db SÍ se versiona a propósito: GitHub Actions la lee y la
+# actualiza cada noche (ver .github/workflows/reporte_telegram.yml) para
+# poder enviar el reporte de Telegram aunque esta PC esté apagada.

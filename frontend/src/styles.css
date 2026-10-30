@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background-color: #f3f4f6;
+  color: #111827;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* Scrollbar discreto para el panel de boleto */
+.bet-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.bet-scroll::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 9999px;
+}

@@ -1,0 +1,89 @@
+<div class="min-h-screen bg-gray-50 px-6 py-8">
+  <div class="mx-auto max-w-7xl">
+    <!-- Header: barra superior limpia, sin pestañas redundantes -->
+    <header class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">⚽</span>
+        <div>
+          <h1 class="text-base font-bold leading-tight text-gray-900">
+            Panel de Análisis · {{ activeMarketDef().label }}
+          </h1>
+          <p class="text-xs text-gray-500">{{ competitionFilter.selected()?.nombre }} · datos de apuestas.db</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs">
+        <select
+          [ngModel]="competitionFilter.selectedId()"
+          (ngModelChange)="competitionFilter.select($event)"
+          class="rounded-full border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 focus:border-emerald-500 focus:outline-none"
+          aria-label="Competición"
+        >
+          @for (c of competitionFilter.competiciones(); track c.id) {
+            <option [value]="c.id">🏆 {{ c.nombre }}</option>
+          }
+        </select>
+
+        @if (selectedSeason()) {
+          <span class="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-600">
+            🗓️ Temporada {{ selectedSeason() }}-{{ selectedSeason()! + 1 }}
+          </span>
+        }
+        <span class="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700 ring-1 ring-emerald-200">
+          🟢 Datos en vivo
+        </span>
+      </div>
+    </header>
+
+    <!-- Stat cards -->
+    <section class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-500">👥 Equipos analizados</p>
+        <p class="mt-1 text-2xl font-bold text-gray-900">{{ summary().totalTeams }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-500">🎯 Candidatos ≥ 75%</p>
+        <p class="mt-1 text-2xl font-bold text-emerald-600">{{ summary().strictCandidates }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-500">📈 % promedio sobre línea</p>
+        <p class="mt-1 text-2xl font-bold text-gray-900">{{ summary().avgPct.toFixed(1) }}%</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-500">🏅 Equipo líder</p>
+        <p class="mt-1 truncate text-2xl font-bold text-gray-900">
+          {{ summary().topTeamName }}
+        </p>
+      </div>
+    </section>
+
+    <!-- Layout principal: análisis de mercados (central) + posiciones y boleto (sidebar) -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+      <app-teams-stats-table />
+
+      <div class="flex flex-col gap-6">
+        <app-standings-table
+          [compact]="true"
+          (teamSelected)="selectedTeamId.set($event)"
+          (seasonChanged)="selectedSeason.set($event)"
+        />
+        <app-bet-slip />
+      </div>
+    </div>
+
+    <!-- Ficha de equipo + calendario, a todo lo ancho, cuando hay un equipo seleccionado -->
+    @if (selectedTeamId()) {
+      <div class="mt-6 flex flex-col gap-6">
+        <app-team-overview [teamId]="selectedTeamId()" [season]="selectedSeason()" />
+        <app-team-schedule [teamId]="selectedTeamId()" [season]="selectedSeason()" />
+      </div>
+    }
+
+    <!-- Pronósticos con IA: sección fija, siempre visible (no es un modal) -->
+    <div class="mt-6">
+      <app-forecast-panel />
+    </div>
+  </div>
+
+  <app-team-popup />
+</div>

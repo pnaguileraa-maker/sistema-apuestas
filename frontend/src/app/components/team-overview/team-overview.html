@@ -1,0 +1,140 @@
+@if (data(); as info) {
+  <section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <!-- Cabecera H2H: escudo, nombre, forma reciente -->
+    <div class="border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-white p-5">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <app-team-crest [logoUrl]="info.summary.teamLogo" [teamName]="info.summary.teamName" size="lg" />
+          <div>
+            <h3 class="text-xl font-bold text-gray-900">{{ info.summary.teamName }}</h3>
+            <p class="text-sm text-gray-500">{{ info.summary.matchesPlayed }} partidos jugados en la temporada</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="mr-1 text-xs font-medium uppercase tracking-wide text-gray-400">Forma</span>
+          @for (result of recentForm(); track $index) {
+            <span
+              class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+              [ngClass]="resultBadgeClass(result)"
+            >
+              {{ result }}
+            </span>
+          } @empty {
+            <span class="text-xs text-gray-400">Sin partidos jugados aún</span>
+          }
+        </div>
+      </div>
+
+      @if (nextMatch(); as next) {
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+          <div class="flex items-center gap-3 text-sm">
+            <span class="font-medium text-gray-500">Próximo partido</span>
+            <span class="flex items-center gap-2 font-semibold text-gray-900">
+              <app-team-crest
+                [logoUrl]="next.isHome ? info.summary.teamLogo : next.opponentLogo"
+                [teamName]="next.isHome ? info.summary.teamName : next.opponentName"
+                size="sm"
+              />
+              {{ next.isHome ? info.summary.teamName : next.opponentName }}
+              <span class="text-gray-400">vs</span>
+              <app-team-crest
+                [logoUrl]="next.isHome ? next.opponentLogo : info.summary.teamLogo"
+                [teamName]="next.isHome ? next.opponentName : info.summary.teamName"
+                size="sm"
+              />
+              {{ next.isHome ? next.opponentName : info.summary.teamName }}
+            </span>
+          </div>
+          <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700 ring-1 ring-sky-200">
+            🗓️ {{ next.date | date: "EEEE d MMM, HH:mm" }}
+          </span>
+        </div>
+      }
+    </div>
+
+    <div class="p-5">
+      <!-- Barra de rendimiento V/E/D -->
+      <div class="mb-6">
+        <div class="mb-2 flex items-center justify-between text-xs text-gray-500">
+          <span>Rendimiento de la temporada</span>
+          <span>{{ info.summary.won }}V · {{ info.summary.drawn }}E · {{ info.summary.lost }}D</span>
+        </div>
+        <div class="flex h-3 w-full overflow-hidden rounded-full bg-gray-100">
+          @if (info.summary.winPct > 0) {
+            <div
+              class="h-full bg-emerald-500"
+              [style.width.%]="info.summary.winPct"
+              [title]="'Victorias: ' + info.summary.winPct + '%'"
+            ></div>
+          }
+          @if (info.summary.drawPct > 0) {
+            <div
+              class="h-full bg-gray-400"
+              [style.width.%]="info.summary.drawPct"
+              [title]="'Empates: ' + info.summary.drawPct + '%'"
+            ></div>
+          }
+          @if (info.summary.lossPct > 0) {
+            <div
+              class="h-full bg-rose-500"
+              [style.width.%]="info.summary.lossPct"
+              [title]="'Derrotas: ' + info.summary.lossPct + '%'"
+            ></div>
+          }
+        </div>
+        <div class="mt-2 flex flex-wrap gap-4 text-xs text-gray-500">
+          <span class="flex items-center gap-1.5">
+            <span class="h-2 w-2 rounded-full bg-emerald-500"></span>{{ info.summary.winPct }}% Victorias
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="h-2 w-2 rounded-full bg-gray-400"></span>{{ info.summary.drawPct }}% Empates
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="h-2 w-2 rounded-full bg-rose-500"></span>{{ info.summary.lossPct }}% Derrotas
+          </span>
+        </div>
+      </div>
+
+      <!-- Mercado Goles -->
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">⚽ Goles del partido</p>
+      <div class="mb-6 grid grid-cols-3 gap-3">
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+          <p class="text-xs uppercase tracking-wide text-gray-500">Over 1.5</p>
+          <p class="mt-1 text-xl font-bold text-emerald-600">{{ info.summary.over15Pct }}%</p>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+          <p class="text-xs uppercase tracking-wide text-gray-500">Over 2.5</p>
+          <p class="mt-1 text-xl font-bold text-emerald-600">{{ info.summary.over25Pct }}%</p>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+          <p class="text-xs uppercase tracking-wide text-gray-500">Over 3.5</p>
+          <p class="mt-1 text-xl font-bold text-emerald-600">{{ info.summary.over35Pct }}%</p>
+        </div>
+      </div>
+
+      <!-- Córners y tarjetas -->
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">🚩🟨 Córners y tarjetas</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p class="text-xs uppercase tracking-wide text-gray-500">🚩 Córners (avg)</p>
+          @if (info.summary.cornersAvg !== null) {
+            <p class="mt-1 text-xl font-bold text-sky-600">{{ info.summary.cornersAvg }}</p>
+            <p class="text-xs text-gray-500">Línea +{{ info.summary.cornersLine }}: {{ info.summary.cornersOverPct }}%</p>
+          } @else {
+            <p class="mt-1 text-sm text-gray-400">Sin datos</p>
+          }
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p class="text-xs uppercase tracking-wide text-gray-500">🟨 Tarjetas (avg)</p>
+          @if (info.summary.cardsAvg !== null) {
+            <p class="mt-1 text-xl font-bold text-amber-600">{{ info.summary.cardsAvg }}</p>
+            <p class="text-xs text-gray-500">Línea +{{ info.summary.cardsLine }}: {{ info.summary.cardsOverPct }}%</p>
+          } @else {
+            <p class="mt-1 text-sm text-gray-400">Sin datos</p>
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+}

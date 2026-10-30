@@ -1,0 +1,77 @@
+<article class="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+  <!-- Cabecera: competición -->
+  <div class="mb-3 text-xs">
+    <span class="font-medium text-gray-500">{{ pick().leagueName }}</span>
+  </div>
+
+  <!-- Escudos + nombre oficial del club + hora/resultado -->
+  <div class="mb-3 flex items-center justify-center gap-3">
+    <button
+      type="button"
+      (click)="openProfile(pick().homeTeamId, $event)"
+      class="flex w-24 flex-col items-center gap-1 hover:opacity-80"
+      title="Ver perfil avanzado"
+    >
+      <app-team-crest [logoUrl]="pick().homeTeamLogo" [teamName]="pick().homeTeamName" size="md" />
+      <span class="text-center text-xs font-bold leading-tight text-gray-700">{{ pick().homeTeamName }}</span>
+    </button>
+
+    <div class="flex flex-col items-center gap-0.5 px-1">
+      @if (marcador(); as m) {
+        <span class="text-base font-bold text-gray-900">{{ m }}</span>
+      } @else {
+        <span class="text-sm font-medium text-gray-400">vs</span>
+        <span class="text-[11px] text-gray-500">{{ pick().date | date: 'EEE d MMM, HH:mm' }}</span>
+      }
+    </div>
+
+    <button
+      type="button"
+      (click)="openProfile(pick().awayTeamId, $event)"
+      class="flex w-24 flex-col items-center gap-1 hover:opacity-80"
+      title="Ver perfil avanzado"
+    >
+      <app-team-crest [logoUrl]="pick().awayTeamLogo" [teamName]="pick().awayTeamName" size="md" />
+      <span class="text-center text-xs font-bold leading-tight text-gray-700">{{ pick().awayTeamName }}</span>
+    </button>
+  </div>
+
+  <!-- Recomendación principal -->
+  <div
+    class="mb-4 rounded-lg px-3 py-2 text-center text-sm font-bold ring-1"
+    [ngClass]="
+      pick().mercado === null
+        ? 'bg-gray-50 text-gray-400 ring-gray-200'
+        : pick().solido
+          ? 'bg-violet-50 text-violet-700 ring-violet-200'
+          : 'bg-amber-50 text-amber-700 ring-amber-200'
+    "
+  >
+    {{ pick().recomendacion }}
+  </div>
+
+  <!-- Desglose estadístico de respaldo -->
+  @if (pick().rachas.length > 0) {
+    <div class="flex flex-col gap-2 text-xs">
+      @for (r of pick().rachas; track r.etiqueta) {
+        <div>
+          <div class="mb-1 flex items-center justify-between">
+            <span class="text-gray-600">{{ r.aciertos }}/{{ r.total }} · {{ r.etiqueta }}</span>
+            <span class="font-semibold" [ngClass]="textoClase(r.porcentaje)">
+              {{ r.porcentaje !== null ? r.porcentaje + '%' : '—' }}
+            </span>
+          </div>
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              class="h-full rounded-full transition-all"
+              [ngClass]="barraClase(r.porcentaje)"
+              [style.width.%]="r.porcentaje ?? 0"
+            ></div>
+          </div>
+        </div>
+      }
+    </div>
+  } @else {
+    <p class="text-center text-xs text-gray-400">Todavía no hay historial suficiente para este partido.</p>
+  }
+</article>

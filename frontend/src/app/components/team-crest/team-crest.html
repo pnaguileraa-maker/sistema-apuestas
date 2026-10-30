@@ -1,0 +1,18 @@
+@if (logoUrl() && !loadFailed()) {
+  <img
+    [src]="logoUrl()"
+    [alt]="teamName()"
+    [title]="teamName()"
+    (error)="onError()"
+    class="shrink-0 rounded-full border border-gray-200 bg-white object-contain p-0.5"
+    [ngClass]="sizeClass"
+  />
+} @else {
+  <span
+    [title]="teamName()"
+    class="flex shrink-0 items-center justify-center rounded-full font-bold"
+    [ngClass]="[sizeClass, fallbackColor]"
+  >
+    {{ initials }}
+  </span>
+}

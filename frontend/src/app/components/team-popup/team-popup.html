@@ -1,0 +1,79 @@
+@if (popup.teamId() !== null) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" (click)="popup.close()">
+    <div
+      class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-2xl"
+      (click)="$event.stopPropagation()"
+    >
+      @if (profile(); as data) {
+        <!-- Cabecera -->
+        <div class="flex items-start justify-between gap-3 border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-white p-5">
+          <div class="flex items-center gap-4">
+            <app-team-crest [logoUrl]="data.teamLogo" [teamName]="data.teamName" size="lg" />
+            <div>
+              <h3 class="text-xl font-bold text-gray-900">{{ data.teamName }}</h3>
+              <p class="text-sm text-gray-500">
+                @if (data.country) {
+                  🌍 {{ data.country }}
+                }
+                @if (data.position !== null) {
+                  · 📍 Posición #{{ data.position }} en la Premier League
+                }
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            (click)="popup.close()"
+            class="shrink-0 rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Forma reciente -->
+        <div class="flex items-center gap-2 border-b border-gray-200 px-5 py-3">
+          <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Forma reciente</span>
+          <div class="flex gap-1.5">
+            @for (result of data.form; track $index) {
+              <span
+                class="flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
+                [ngClass]="resultBadgeClass(result)"
+              >
+                {{ result }}
+              </span>
+            } @empty {
+              <span class="text-xs text-gray-400">Sin partidos jugados aún</span>
+            }
+          </div>
+        </div>
+
+        <!-- Desglose General / Local / Visitante -->
+        <div class="p-5">
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="text-xs uppercase tracking-wide text-gray-400">
+                <th class="pb-2 font-medium">Métrica</th>
+                <th class="pb-2 text-center font-medium">General</th>
+                <th class="pb-2 text-center font-medium">🏠 Local</th>
+                <th class="pb-2 text-center font-medium">✈️ Visitante</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              @for (row of rows(); track row.label) {
+                <tr>
+                  <td class="py-2 text-gray-600">{{ row.label }}</td>
+                  <td class="py-2 text-center font-semibold text-gray-900">{{ row.general }}</td>
+                  <td class="py-2 text-center text-gray-700">{{ row.home }}</td>
+                  <td class="py-2 text-center text-gray-700">{{ row.away }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="flex items-center justify-center p-10 text-sm text-gray-400">Cargando perfil del equipo...</div>
+      }
+    </div>
+  </div>
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeEditorTabs">
+    <option name="activeSessionId" value="5cd6a212-2abf-4c8b-b6e9-c5d480dc7e3a" />
+    <option name="openSessionIds">
+      <list>
+        <option value="7227166b-fad1-496f-bfc3-3beb5aab06d9" />
+        <option value="fda5f579-188a-461e-901e-e9c7588acbe7" />
+        <option value="5cd6a212-2abf-4c8b-b6e9-c5d480dc7e3a" />
+      </list>
+    </option>
+    <option name="sessionPaths">
+      <map>
+        <entry key="5cd6a212-2abf-4c8b-b6e9-c5d480dc7e3a" value="/sessions/b7689c65-0fbe-4580-898b-7dd18ec85c85" />
+        <entry key="7227166b-fad1-496f-bfc3-3beb5aab06d9" value="/sessions/new" />
+        <entry key="fda5f579-188a-461e-901e-e9c7588acbe7" value="/sessions/new" />
+      </map>
+    </option>
+    <option name="sessionTitles">
+      <map>
+        <entry key="5cd6a212-2abf-4c8b-b6e9-c5d480dc7e3a" value="Obtener localhost para revisar y continuar" />
+        <entry key="7227166b-fad1-496f-bfc3-3beb5aab06d9" value="Claude Code" />
+        <entry key="fda5f579-188a-461e-901e-e9c7588acbe7" value="Claude Code" />
+      </map>
+    </option>
+  </component>
+</project>
