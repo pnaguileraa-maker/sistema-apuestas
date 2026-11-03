@@ -1,12 +1,15 @@
 name: Reporte diario de Telegram
 
 on:
-  schedule:
-    # 00:00 UTC = 21:00 en Chile con horario de verano (UTC-3). Cuando Chile
-    # vuelve a horario estándar (UTC-4, normalmente en abril) esto corre a
-    # las 20:00 local hasta que se ajuste el cron a mano — GitHub Actions no
-    # sigue zonas horarias con DST, solo UTC fijo.
-    - cron: "0 0 * * *"
+  # PAUSADO (2026-11-03): disparo automático diario desactivado a pedido del
+  # usuario para frenar el consumo de cuota. Para reanudar, descomentar el
+  # bloque schedule.
+  # schedule:
+  #   # 00:00 UTC = 21:00 en Chile con horario de verano (UTC-3). Cuando Chile
+  #   # vuelve a horario estándar (UTC-4, normalmente en abril) esto corre a
+  #   # las 20:00 local hasta que se ajuste el cron a mano — GitHub Actions no
+  #   # sigue zonas horarias con DST, solo UTC fijo.
+  #   - cron: "0 0 * * *"
   workflow_dispatch: {}
 
 jobs:
