@@ -114,6 +114,9 @@ def construir_bloque_partido(partido: dict, season: int) -> str:
         lineas.append(
             f"   • 💰 Moneyline: *{pronostico['moneyline']['equipo']}* — *{pronostico['moneyline']['probabilidad']:.0f}%*"
         )
+    elif pronostico["margen"] is not None:
+        margen = pronostico["margen"]
+        lineas.append(f"   • 📐 Diferencia de puntos promedio: *{margen['equipo']}* ({margen['diferencia']:+.1f})")
 
     lineas.append(
         f"   • 📊 Más de {pronostico['puntosTotales']['linea']} puntos totales — *{pronostico['puntosTotales']['overPct']:.0f}%*"

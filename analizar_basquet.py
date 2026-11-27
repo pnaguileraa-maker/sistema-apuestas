@@ -23,12 +23,16 @@ def _resumen_splits(partidos: list[dict]) -> dict | None:
     ganados = sum(1 for p in partidos if p["puntos_favor"] > p["puntos_contra"])
     sobre_linea = sum(1 for p in partidos if p["puntos_favor"] + p["puntos_contra"] > LINEA_PUNTOS_TOTALES)
 
+    puntos_favor_avg = sum(p["puntos_favor"] for p in partidos) / jugados
+    puntos_contra_avg = sum(p["puntos_contra"] for p in partidos) / jugados
+
     return {
         "played": jugados,
         "won": ganados,
         "winPct": round(ganados / jugados * 100, 1),
-        "pointsForAvg": round(sum(p["puntos_favor"] for p in partidos) / jugados, 1),
-        "pointsAgainstAvg": round(sum(p["puntos_contra"] for p in partidos) / jugados, 1),
+        "pointsForAvg": round(puntos_favor_avg, 1),
+        "pointsAgainstAvg": round(puntos_contra_avg, 1),
+        "pointsDiffAvg": round(puntos_favor_avg - puntos_contra_avg, 1),
         "overTotalPct": round(sobre_linea / jugados * 100, 1),
     }
 
@@ -77,8 +81,12 @@ def perfil_equipo_nba(team_id: int, season: int) -> dict | None:
 
 def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
     """Moneyline (equipo favorito según su % de victorias en su rol) y
-    puntos totales (over/under la línea), para un partido puntual. None si
-    a alguno de los dos equipos le falta muestra."""
+    puntos totales (over/under la línea), para un partido puntual. Si
+    ningún equipo llega a 50% de victorias no hay favorito real — en ese
+    caso se reemplaza el moneyline por la diferencia de puntos promedio
+    del equipo más competitivo de los dos (hándicap), en vez de mostrar un
+    "pick" con menos de 50% de probabilidad como si fuera confiable.
+    None si a alguno de los dos equipos le falta muestra."""
     perfil_home = perfil_equipo_nba(home_id, season)
     perfil_away = perfil_equipo_nba(away_id, season)
     if perfil_home is None or perfil_away is None:
@@ -88,11 +96,14 @@ def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
     if casa is None or visita is None or casa["played"] < MIN_PARTIDOS_PERFIL or visita["played"] < MIN_PARTIDOS_PERFIL:
         return None
 
-    # Si ambos equipos tienen menos de 50% de victorias en su rol, ninguno
-    # es un favorito real — mostrar el "menos malo" como pick induciría a
-    # error (parecería una recomendación confiada sin serlo).
+    moneyline = None
+    margen = None
+
     if casa["winPct"] < 50.0 and visita["winPct"] < 50.0:
-        moneyline = None
+        if casa["pointsDiffAvg"] >= visita["pointsDiffAvg"]:
+            margen = {"equipo": perfil_home["teamName"], "diferencia": casa["pointsDiffAvg"]}
+        else:
+            margen = {"equipo": perfil_away["teamName"], "diferencia": visita["pointsDiffAvg"]}
     elif casa["winPct"] >= visita["winPct"]:
         moneyline = {"equipo": perfil_home["teamName"], "probabilidad": casa["winPct"]}
     else:
@@ -104,6 +115,7 @@ def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
         "home": perfil_home["teamName"],
         "away": perfil_away["teamName"],
         "moneyline": moneyline,
+        "margen": margen,
         "puntosTotales": {"linea": LINEA_PUNTOS_TOTALES, "overPct": puntos_total_pct},
     }
 
