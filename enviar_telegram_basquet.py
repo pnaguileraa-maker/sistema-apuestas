@@ -1,12 +1,14 @@
 """
 Envía por Telegram, cada noche, el reporte de pronósticos NBA (moneyline,
-puntos totales y props de jugadores destacados) de los partidos de MAÑANA.
+puntos totales, tablas de jugadores por indicador y lesionados) de los
+partidos de MAÑANA.
 
 Mensaje SEPARADO del reporte de fútbol (enviar_telegram.py) — mismo bot y
 chat, pero un envío aparte, para no mezclar ambos deportes en un solo texto.
 
 Se calcula 100% desde apuestas.db (analizar_basquet.py /
-analizar_jugadores_basquet.py), sin depender de la API de Claude.
+analizar_jugadores_basquet.py) + el reporte de lesionados en vivo de ESPN
+(lesionados_nba.py), sin depender de la API de Claude.
 
 Variables de entorno requeridas (.env):
     TELEGRAM_BOT_TOKEN   Token del bot (de @BotFather)
@@ -24,7 +26,7 @@ import requests
 from dotenv import load_dotenv
 
 from analizar_basquet import pronostico_partido
-from analizar_jugadores_basquet import elegir_top_props_jugador, perfil_jugador_nba
+from analizar_jugadores_basquet import companeros_que_podrian_absorber, perfil_jugador_nba
 from cargar_temporada_nba import temporada_actual_nba
 from lesionados_nba import obtener_lesionados
 
@@ -35,7 +37,8 @@ CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
 MAX_PARTIDOS = 10
-JUGADORES_DESTACADOS_POR_EQUIPO = 2
+TOP_TABLA = 8  # filas por tabla de indicador
+DIFERENCIA_MINIMA_ABSORCION = 3.0  # puntos de más sin el compañero para que valga la pena avisarlo
 LIMITE_CARACTERES_MENSAJE = 3800
 
 DIAS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -44,31 +47,23 @@ MESES_ES = [
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ]
 
+STATS_TABLA = (
+    ("points", "📊 *Puntos*"),
+    ("three_made", "🎯 *Triples*"),
+    ("assists", "🤝 *Asistencias*"),
+    ("rebounds_tot", "🏉 *Rebotes*"),
+)
+
 
 def formatear_fecha(fecha_iso: str) -> str:
     fecha = date.fromisoformat(fecha_iso)
     return f"{DIAS_ES[fecha.weekday()]} {fecha.day} de {MESES_ES[fecha.month - 1]} de {fecha.year}"
 
 
-def jugadores_destacados(team_id: int, season: int, limite: int) -> list[dict]:
-    """Hasta `limite` jugadores del equipo con props por encima del umbral,
-    ordenados por promedio de puntos (los titulares suelen ser los que más
-    muestra y relevancia tienen para el reporte)."""
-    conn = sqlite3.connect("apuestas.db")
-    jugadores = conn.execute("SELECT id FROM nba_players WHERE team_id = ?", (team_id,)).fetchall()
-    conn.close()
-
-    candidatos = []
-    for (player_id,) in jugadores:
-        perfil = perfil_jugador_nba(player_id, season)
-        if perfil is None:
-            continue
-        props = elegir_top_props_jugador(perfil, top=3)
-        if props:
-            candidatos.append({"nombre": perfil["playerName"], "props": props, "promedioPuntos": perfil["props"].get("points", {}).get("promedio", 0)})
-
-    candidatos.sort(key=lambda c: c["promedioPuntos"], reverse=True)
-    return candidatos[:limite]
+def _apodo(nombre_equipo: str) -> str:
+    """Último término del nombre oficial (ej. "Los Angeles Lakers" ->
+    "Lakers") — así entran en las columnas angostas de las tablas."""
+    return nombre_equipo.split()[-1]
 
 
 def partidos_de_manana() -> tuple[list[dict], str, int]:
@@ -107,37 +102,147 @@ def partidos_de_manana() -> tuple[list[dict], str, int]:
     return partidos[:MAX_PARTIDOS], manana, season
 
 
-def construir_bloque_partido(partido: dict, season: int, lesionados: dict) -> str:
-    pronostico = partido["pronostico"]
-    lineas = [f"🏀 *{partido['home']} vs {partido['away']}*"]
+def _clave_orden_partido(partido: dict) -> float:
+    """Probabilidad del pick de moneyline; 0 (al final) si no hay favorito
+    claro — ahí no hay un "éxito" concreto que ordenar."""
+    moneyline = partido["pronostico"]["moneyline"]
+    return moneyline["probabilidad"] if moneyline is not None else 0.0
 
-    if pronostico["moneyline"] is not None:
+
+def construir_resumen_partidos(partidos: list[dict]) -> str:
+    lineas = ["*Partidos de mañana (de mayor a menor probabilidad)*"]
+    for indice, partido in enumerate(partidos, start=1):
+        pronostico = partido["pronostico"]
+        if pronostico["moneyline"] is not None:
+            pick = f"💰 {pronostico['moneyline']['equipo']} ({pronostico['moneyline']['probabilidad']:.0f}%)"
+        else:
+            margen = pronostico["margen"]
+            pick = f"📐 {margen['equipo']} ({margen['diferencia']:+.1f})" if margen else "sin favorito claro"
         lineas.append(
-            f"   • 💰 Moneyline: *{pronostico['moneyline']['equipo']}* — *{pronostico['moneyline']['probabilidad']:.0f}%*"
+            f"{indice}. {partido['home']} vs {partido['away']} — {pick} · "
+            f"más de {pronostico['puntosTotales']['linea']} pts ({pronostico['puntosTotales']['overPct']:.0f}%)"
         )
-    elif pronostico["margen"] is not None:
-        margen = pronostico["margen"]
-        lineas.append(f"   • 📐 Diferencia de puntos promedio: *{margen['equipo']}* ({margen['diferencia']:+.1f})")
-
-    lineas.append(
-        f"   • 📊 Más de {pronostico['puntosTotales']['linea']} puntos totales — *{pronostico['puntosTotales']['overPct']:.0f}%*"
-    )
-
-    for team_id, team_name in ((partido["homeId"], partido["home"]), (partido["awayId"], partido["away"])):
-        bajas_equipo = lesionados.get(team_name, [])
-        jugadores_out = {b["jugador"] for b in bajas_equipo if b["estado"] == "Out"}
-
-        for jugador in jugadores_destacados(team_id, season, JUGADORES_DESTACADOS_POR_EQUIPO):
-            if jugador["nombre"] in jugadores_out:
-                continue  # está confirmado afuera: la prop no tiene sentido mostrarla
-            props_texto = ", ".join(f"{p['etiqueta']} ({p['probabilidad']:.0f}%)" for p in jugador["props"])
-            lineas.append(f"   • 🧑‍💼 {jugador['nombre']}: {props_texto}")
-
-        if bajas_equipo:
-            texto_bajas = ", ".join(f"{b['jugador']} ({b['estado']})" for b in bajas_equipo)
-            lineas.append(f"   • 🚑 Bajas {team_name}: {texto_bajas}")
-
     return "\n".join(lineas)
+
+
+def construir_pool_jugadores(partidos: list[dict], season: int) -> list[dict]:
+    """Perfil de TODOS los jugadores con muestra suficiente de los equipos
+    que juegan mañana (no solo los "destacados"), para armar las tablas de
+    indicadores sobre el universo completo de la jornada."""
+    conn = sqlite3.connect("apuestas.db")
+    pool = []
+    for partido in partidos:
+        for team_id, team_name, rival in (
+            (partido["homeId"], partido["home"], partido["away"]),
+            (partido["awayId"], partido["away"], partido["home"]),
+        ):
+            jugadores = conn.execute("SELECT id FROM nba_players WHERE team_id = ?", (team_id,)).fetchall()
+            for (player_id,) in jugadores:
+                perfil = perfil_jugador_nba(player_id, season)
+                if perfil is not None:
+                    pool.append({"perfil": perfil, "equipo": team_name, "rival": rival})
+    conn.close()
+    return pool
+
+
+def construir_tabla_stat(pool: list[dict], stat_key: str, etiqueta: str) -> str:
+    filas = []
+    for item in pool:
+        datos = item["perfil"]["props"].get(stat_key)
+        if datos is None:
+            continue
+        filas.append((item["perfil"]["playerName"], item["rival"], datos["promedio"], datos["linea"], datos["overPct"]))
+
+    if not filas:
+        return ""
+
+    filas.sort(key=lambda f: f[2], reverse=True)
+    filas = filas[:TOP_TABLA]
+
+    cabecera = f"{'Jugador':<16}{'Rival':<9}{'Prom':>5}{'Lin':>5}{'%':>5}"
+    cuerpo = [cabecera]
+    for nombre, rival, promedio, linea, pct in filas:
+        cuerpo.append(f"{nombre[:15]:<16}{_apodo(rival)[:8]:<9}{promedio:>5.1f}{linea:>5.1f}{pct:>4.0f}%")
+
+    return etiqueta + "\n```\n" + "\n".join(cuerpo) + "\n```"
+
+
+def construir_tabla_dobles(pool: list[dict]) -> str:
+    filas = [
+        (item["perfil"]["playerName"], item["rival"], item["perfil"]["doubleDoublePct"], item["perfil"]["tripleDoublePct"])
+        for item in pool
+        if item["perfil"]["doubleDoublePct"] > 0
+    ]
+    if not filas:
+        return ""
+
+    filas.sort(key=lambda f: (f[2], f[3]), reverse=True)
+    filas = filas[:TOP_TABLA]
+
+    cabecera = f"{'Jugador':<16}{'Rival':<9}{'DD%':>5}{'TD%':>5}"
+    cuerpo = [cabecera]
+    for nombre, rival, dd, td in filas:
+        cuerpo.append(f"{nombre[:15]:<16}{_apodo(rival)[:8]:<9}{dd:>4.0f}%{td:>4.0f}%")
+
+    return "🔥 *Doble-doble / Triple-doble*\n```\n" + "\n".join(cuerpo) + "\n```"
+
+
+def construir_bajas(partidos: list[dict], lesionados: dict) -> str:
+    lineas = []
+    equipos_vistos = set()
+    for partido in partidos:
+        for team_name in (partido["home"], partido["away"]):
+            if team_name in equipos_vistos:
+                continue
+            equipos_vistos.add(team_name)
+            bajas_equipo = lesionados.get(team_name, [])
+            if bajas_equipo:
+                texto = ", ".join(f"{b['jugador']} ({b['estado']})" for b in bajas_equipo)
+                lineas.append(f"• {team_name}: {texto}")
+
+    if not lineas:
+        return ""
+    return "🚑 *Bajas de hoy*\n" + "\n".join(lineas)
+
+
+def construir_absorciones(partidos: list[dict], lesionados: dict, season: int) -> str:
+    """Compañeros de un jugador confirmado "Out" cuyo promedio de puntos
+    sube cuando él no juega esta temporada — señal exploratoria de pocos
+    partidos, no una certeza, pero sirve para detectar posibles sorpresas
+    por el aumento de intentos/minutos."""
+    lineas = []
+    equipos_vistos = set()
+    conn = sqlite3.connect("apuestas.db")
+
+    for partido in partidos:
+        for team_id, team_name in ((partido["homeId"], partido["home"]), (partido["awayId"], partido["away"])):
+            if team_name in equipos_vistos:
+                continue
+            equipos_vistos.add(team_name)
+
+            for baja in lesionados.get(team_name, []):
+                if baja["estado"] != "Out":
+                    continue
+                fila = conn.execute(
+                    "SELECT id FROM nba_players WHERE team_id = ? AND name = ?", (team_id, baja["jugador"])
+                ).fetchone()
+                if fila is None:
+                    continue  # no lo pudimos cruzar con nuestra base (ej. apodo distinto a ESPN)
+
+                candidatos = companeros_que_podrian_absorber(team_id, fila[0], season, stat="points")
+                if not candidatos or candidatos[0]["diferencia"] < DIFERENCIA_MINIMA_ABSORCION:
+                    continue
+
+                mejor = candidatos[0]
+                lineas.append(
+                    f"• {team_name} sin *{baja['jugador']}*: *{mejor['playerName']}* promedia "
+                    f"{mejor['promedioSin']} pts sin él (vs {mejor['promedioCon']} con él en cancha)"
+                )
+
+    conn.close()
+    if not lineas:
+        return ""
+    return "⚠️ *Posible absorción de puntos por lesión*\n" + "\n".join(lineas)
 
 
 def construir_mensajes(partidos: list[dict], fecha_manana: str, season: int, lesionados: dict) -> list[str]:
@@ -146,10 +251,31 @@ def construir_mensajes(partidos: list[dict], fecha_manana: str, season: int, les
     if not partidos:
         return [encabezado + "\nNo encontramos partidos NBA con datos suficientes para mañana. 📭"]
 
+    partidos = sorted(partidos, key=_clave_orden_partido, reverse=True)
+    pool = construir_pool_jugadores(partidos, season)
+
+    secciones = [construir_resumen_partidos(partidos)]
+    for stat_key, etiqueta in STATS_TABLA:
+        tabla = construir_tabla_stat(pool, stat_key, etiqueta)
+        if tabla:
+            secciones.append(tabla)
+
+    tabla_dobles = construir_tabla_dobles(pool)
+    if tabla_dobles:
+        secciones.append(tabla_dobles)
+
+    bajas = construir_bajas(partidos, lesionados)
+    if bajas:
+        secciones.append(bajas)
+
+    absorciones = construir_absorciones(partidos, lesionados, season)
+    if absorciones:
+        secciones.append(absorciones)
+
     mensajes = []
     actual = encabezado
-    for partido in partidos:
-        bloque = "\n\n" + construir_bloque_partido(partido, season, lesionados)
+    for seccion in secciones:
+        bloque = "\n\n" + seccion
         if len(actual) + len(bloque) > LIMITE_CARACTERES_MENSAJE:
             mensajes.append(actual)
             actual = "🏀 *Pronósticos NBA (continuación)*" + bloque

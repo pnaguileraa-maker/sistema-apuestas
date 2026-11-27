@@ -109,6 +109,82 @@ def elegir_top_props_jugador(perfil: dict, top: int = 3) -> list[dict]:
     return selecciones[:top]
 
 
+def _partidos_con_y_sin(team_id: int, jugador_id: int, season: int) -> tuple[set, set]:
+    """IDs de partidos TERMINADOS del equipo esta temporada, separados entre
+    los que jugador_id jugó y los que no (no hay fila de stats para él)."""
+    conn = sqlite3.connect("apuestas.db")
+    partidos_equipo = {
+        fila[0]
+        for fila in conn.execute(
+            """
+            SELECT id FROM nba_games
+            WHERE season = ? AND (home_team_id = ? OR away_team_id = ?) AND home_points IS NOT NULL
+            """,
+            (season, team_id, team_id),
+        ).fetchall()
+    }
+    jugo = {
+        fila[0] for fila in conn.execute("SELECT game_id FROM nba_player_game_stats WHERE player_id = ?", (jugador_id,)).fetchall()
+    }
+    conn.close()
+    jugo = jugo & partidos_equipo
+    return jugo, partidos_equipo - jugo
+
+
+def companeros_que_podrian_absorber(
+    team_id: int, jugador_ausente_id: int, season: int, stat: str = "points", min_partidos: int = 2
+) -> list[dict]:
+    """Compañeros del jugador ausente cuyo promedio de `stat` sube en los
+    partidos donde él NO jugó esta temporada, respecto a cuando sí jugó.
+    Muestra chica (min_partidos por defecto) porque una baja reciente no
+    deja mucho historial sin el jugador — es una señal exploratoria, no una
+    certeza estadística."""
+    jugo, no_jugo = _partidos_con_y_sin(team_id, jugador_ausente_id, season)
+    if len(no_jugo) < min_partidos or len(jugo) < min_partidos:
+        return []
+
+    conn = sqlite3.connect("apuestas.db")
+    filas = conn.execute(
+        f"SELECT player_id, game_id, {stat} FROM nba_player_game_stats WHERE team_id = ?",
+        (team_id,),
+    ).fetchall()
+    conn.close()
+
+    por_jugador: dict[int, dict[str, list]] = {}
+    for player_id, game_id, valor in filas:
+        if player_id == jugador_ausente_id or valor is None:
+            continue
+        splits = por_jugador.setdefault(player_id, {"con": [], "sin": []})
+        if game_id in jugo:
+            splits["con"].append(valor)
+        elif game_id in no_jugo:
+            splits["sin"].append(valor)
+
+    conn = sqlite3.connect("apuestas.db")
+    resultado = []
+    for player_id, splits in por_jugador.items():
+        if len(splits["con"]) < min_partidos or len(splits["sin"]) < min_partidos:
+            continue
+        promedio_con = sum(splits["con"]) / len(splits["con"])
+        promedio_sin = sum(splits["sin"]) / len(splits["sin"])
+        if promedio_sin <= promedio_con:
+            continue
+        nombre = conn.execute("SELECT name FROM nba_players WHERE id = ?", (player_id,)).fetchone()[0]
+        resultado.append(
+            {
+                "playerId": player_id,
+                "playerName": nombre,
+                "promedioCon": round(promedio_con, 1),
+                "promedioSin": round(promedio_sin, 1),
+                "diferencia": round(promedio_sin - promedio_con, 1),
+            }
+        )
+    conn.close()
+
+    resultado.sort(key=lambda r: r["diferencia"], reverse=True)
+    return resultado
+
+
 def analizar_candidatos_jugadores(season: int) -> None:
     conn = sqlite3.connect("apuestas.db")
     jugadores = conn.execute("SELECT id FROM nba_players").fetchall()
