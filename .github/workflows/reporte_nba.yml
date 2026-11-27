@@ -2,12 +2,15 @@ name: Reporte diario de Telegram (NBA)
 
 on:
   schedule:
-    # 14:00 UTC = 11:00 en Chile con horario de verano (UTC-3) = 09:00 ET
-    # (UTC-5, invierno en EEUU). Corre bien antes de cualquier partido NBA
-    # del día (hasta los excepcionales que arrancan ~13:00 ET los domingos
-    # quedan con horas de margen) para que el reporte avise los partidos de
-    # ESA MISMA noche, no los del día siguiente.
-    - cron: "0 14 * * *"
+    # 22:00 UTC = 19:00 en Chile con horario de verano (UTC-3) = 17:00 ET
+    # (UTC-5, invierno en EEUU) — coincide con el horario en que la NBA
+    # publica oficialmente el injury report del día (5pm ET), así que
+    # cuando se agregue esa fuente de datos el horario ya va a estar listo
+    # para aprovecharla. Deja ~2h de margen antes de los partidos típicos
+    # (7pm ET en adelante); los pocos que arrancan más temprano (domingos
+    # ~13:00 ET / feriados) quedan sin aviso previo, aceptado a cambio de
+    # tener la info de equipos/jugadores más fresca el resto de los días.
+    - cron: "0 22 * * *"
   workflow_dispatch: {}
 
 jobs:
