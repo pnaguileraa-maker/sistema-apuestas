@@ -80,13 +80,11 @@ def perfil_equipo_nba(team_id: int, season: int) -> dict | None:
 
 
 def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
-    """Moneyline (equipo favorito según su % de victorias en su rol) y
-    puntos totales (over/under la línea), para un partido puntual. Si
-    ningún equipo llega a 50% de victorias no hay favorito real — en ese
-    caso se reemplaza el moneyline por la diferencia de puntos promedio
-    del equipo más competitivo de los dos (hándicap), en vez de mostrar un
-    "pick" con menos de 50% de probabilidad como si fuera confiable.
-    None si a alguno de los dos equipos le falta muestra."""
+    """Moneyline y diferencia de puntos promedio (+/-) de CADA equipo en su
+    rol (local/visita), más puntos totales (over/under la línea), para un
+    partido puntual. Se muestran los dos equipos siempre — no se elige un
+    "favorito" único — para que se pueda evaluar la apuesta de cualquiera
+    de los dos lados. None si a alguno de los dos equipos le falta muestra."""
     perfil_home = perfil_equipo_nba(home_id, season)
     perfil_away = perfil_equipo_nba(away_id, season)
     if perfil_home is None or perfil_away is None:
@@ -96,26 +94,11 @@ def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
     if casa is None or visita is None or casa["played"] < MIN_PARTIDOS_PERFIL or visita["played"] < MIN_PARTIDOS_PERFIL:
         return None
 
-    moneyline = None
-    margen = None
-
-    if casa["winPct"] < 50.0 and visita["winPct"] < 50.0:
-        if casa["pointsDiffAvg"] >= visita["pointsDiffAvg"]:
-            margen = {"equipo": perfil_home["teamName"], "diferencia": casa["pointsDiffAvg"]}
-        else:
-            margen = {"equipo": perfil_away["teamName"], "diferencia": visita["pointsDiffAvg"]}
-    elif casa["winPct"] >= visita["winPct"]:
-        moneyline = {"equipo": perfil_home["teamName"], "probabilidad": casa["winPct"]}
-    else:
-        moneyline = {"equipo": perfil_away["teamName"], "probabilidad": visita["winPct"]}
-
     puntos_total_pct = round((casa["overTotalPct"] + visita["overTotalPct"]) / 2, 1)
 
     return {
-        "home": perfil_home["teamName"],
-        "away": perfil_away["teamName"],
-        "moneyline": moneyline,
-        "margen": margen,
+        "home": {"nombre": perfil_home["teamName"], "moneyline": casa["winPct"], "margen": casa["pointsDiffAvg"]},
+        "away": {"nombre": perfil_away["teamName"], "moneyline": visita["winPct"], "margen": visita["pointsDiffAvg"]},
         "puntosTotales": {"linea": LINEA_PUNTOS_TOTALES, "overPct": puntos_total_pct},
     }
 

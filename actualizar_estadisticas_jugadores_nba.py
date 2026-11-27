@@ -17,6 +17,7 @@ Ejecutar:
     python actualizar_estadisticas_jugadores_nba.py
 """
 
+import html
 import sqlite3
 import time
 
@@ -75,7 +76,9 @@ def actualizar_estadisticas_jugadores() -> None:
 
             cursor.execute(
                 "INSERT OR REPLACE INTO nba_players (id, name, team_id) VALUES (?, ?, ?)",
-                (jugador["id"], jugador["name"], equipo["id"]),
+                # API-Basketball a veces trae apóstrofes como entidad HTML
+                # literal (ej. "Nah&apos;Shon") en vez del carácter real.
+                (jugador["id"], html.unescape(jugador["name"]), equipo["id"]),
             )
             cursor.execute(
                 """
