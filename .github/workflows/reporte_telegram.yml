@@ -38,29 +38,6 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python enviar_telegram.py
 
-      # NBA usa API-Basketball (liga id 12), mismo API_FOOTBALL_KEY que el
-      # fútbol (api-sports.io comparte una sola key por cuenta). continue-on-error
-      # evita que un fallo puntual de la ingesta NBA tumbe el resto del job
-      # (el reporte de fútbol de arriba y el commit de abajo).
-      - name: Actualizar partidos y equipos NBA
-        continue-on-error: true
-        env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-        run: python cargar_temporada_nba.py
-
-      - name: Actualizar estadísticas de jugadores NBA
-        continue-on-error: true
-        env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-        run: python actualizar_estadisticas_jugadores_nba.py
-
-      - name: Enviar el reporte NBA a Telegram
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python enviar_telegram_basquet.py
-
       - name: Guardar apuestas.db actualizada en el repo
         run: |
           git config user.name "github-actions[bot]"

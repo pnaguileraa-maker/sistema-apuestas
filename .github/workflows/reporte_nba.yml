@@ -1,0 +1,55 @@
+name: Reporte diario de Telegram (NBA)
+
+on:
+  schedule:
+    # 14:00 UTC = 11:00 en Chile con horario de verano (UTC-3) = 09:00 ET
+    # (UTC-5, invierno en EEUU). Corre bien antes de cualquier partido NBA
+    # del día (hasta los excepcionales que arrancan ~13:00 ET los domingos
+    # quedan con horas de margen) para que el reporte avise los partidos de
+    # ESA MISMA noche, no los del día siguiente.
+    - cron: "0 14 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  enviar-reporte-nba:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Descargar el repo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      # NBA usa API-Basketball (liga id 12), mismo API_FOOTBALL_KEY que el
+      # fútbol (api-sports.io comparte una sola key por cuenta).
+      - name: Actualizar partidos y equipos NBA
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: python cargar_temporada_nba.py
+
+      - name: Actualizar estadísticas de jugadores NBA
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: python actualizar_estadisticas_jugadores_nba.py
+
+      - name: Enviar el reporte NBA a Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python enviar_telegram_basquet.py
+
+      - name: Guardar apuestas.db actualizada en el repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apuestas.db
+          git diff --cached --quiet || git commit -m "chore: actualizar datos NBA"
+          git push
