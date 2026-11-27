@@ -100,14 +100,12 @@ def _tabla_coloreada_por_indicador(pdf: FPDF, encabezados: list[str], anchos: li
 
 
 def _texto_pick_equipo(pick: dict | None) -> str:
+    """Siempre se muestran los dos numeros (moneyline y handicap) del
+    equipo elegido, sea cual sea el que motivo la eleccion - el usuario
+    decide con cual de los dos mercados ir, no hace falta ocultar ninguno."""
     if pick is None:
         return "Partido parejo - sin pick de equipo confiable"
-    if pick["tipo"] == "moneyline":
-        return f"Pick de equipo: {pick['equipo']} - Moneyline {pick['moneyline']:.0f}% | Hándicap {pick['margen']:+.1f} pts"
-    # Si el pick se decidio por handicap es porque NINGUN equipo tiene un
-    # moneyline confiable (<55%) - mostrarlo igual se leeria como una
-    # recomendacion de moneyline que no es real.
-    return f"Pick de equipo: {pick['equipo']} - Hándicap {pick['margen']:+.1f} pts (moneyline parejo)"
+    return f"Pick de equipo: {pick['equipo']} - Moneyline {pick['moneyline']:.0f}% | Hándicap {pick['margen']:+.1f} pts"
 
 
 def _filas_impacto_bajas(partido: dict, lesionados: dict, season: int) -> list[list[str]]:
