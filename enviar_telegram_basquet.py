@@ -20,6 +20,7 @@ Ejecutar manualmente:
 
 import os
 import sqlite3
+import tempfile
 from datetime import date, timedelta
 
 import requests
@@ -34,7 +35,8 @@ load_dotenv()
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+TELEGRAM_API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
+TELEGRAM_API_URL = f"{TELEGRAM_API_BASE}/sendMessage"
 
 MAX_PARTIDOS = 10
 TOP_TABLA = 8  # filas por tabla de indicador
@@ -305,11 +307,36 @@ def enviar_mensaje_telegram(texto: str) -> None:
         print("Mensaje enviado correctamente a Telegram.")
 
 
+def enviar_documento_telegram(ruta_archivo: str, caption: str = "") -> None:
+    with open(ruta_archivo, "rb") as archivo:
+        respuesta = requests.post(
+            f"{TELEGRAM_API_BASE}/sendDocument",
+            data={"chat_id": CHAT_ID, "caption": caption},
+            files={"document": archivo},
+            timeout=30,
+        )
+    if respuesta.status_code != 200:
+        print(f"Error al enviar el PDF a Telegram: {respuesta.status_code} - {respuesta.text}")
+    else:
+        print("PDF enviado correctamente a Telegram.")
+
+
 def main() -> None:
+    from generar_pdf_basquet import generar_pdf
+
     partidos, fecha_hoy, season = partidos_de_hoy()
     lesionados = obtener_lesionados()
+
+    partidos_ordenados = sorted(partidos, key=_clave_orden_partido, reverse=True)
+    pool = construir_pool_jugadores(partidos_ordenados, season)
+
     for mensaje in construir_mensajes(partidos, fecha_hoy, season, lesionados):
         enviar_mensaje_telegram(mensaje)
+
+    with tempfile.TemporaryDirectory() as carpeta_temporal:
+        ruta_pdf = f"{carpeta_temporal}/pronosticos_nba_{fecha_hoy}.pdf"
+        generar_pdf(ruta_pdf, partidos_ordenados, fecha_hoy, pool, lesionados, season)
+        enviar_documento_telegram(ruta_pdf, caption=f"Resumen ejecutivo NBA — {formatear_fecha(fecha_hoy)}")
 
 
 if __name__ == "__main__":
