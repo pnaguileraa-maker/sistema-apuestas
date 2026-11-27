@@ -122,9 +122,10 @@ def _texto_pick_equipo(pick: dict | None) -> str:
 def _texto_candidatos_stat(candidatos: list[dict], con_promedio: bool) -> str:
     def _uno(c: dict) -> str:
         apodo = c["equipo"].split()[-1]
+        alerta = f" ⚠️{c['alerta']}" if c.get("alerta") else ""
         if con_promedio:
-            return f"{c['jugador']} ({apodo}, {c['promedio']:.1f}, {c['probabilidad']:.0f}%)"
-        return f"{c['jugador']} ({apodo}, {c['probabilidad']:.0f}%)"
+            return f"{c['jugador']} ({apodo}, {c['promedio']:.1f}, {c['probabilidad']:.0f}%){alerta}"
+        return f"{c['jugador']} ({apodo}, {c['probabilidad']:.0f}%){alerta}"
 
     return ", ".join(_uno(c) for c in candidatos)
 
@@ -139,7 +140,7 @@ def construir_bloque_partido(partido: dict, season: int, lesionados: dict) -> st
     ]
 
     equipos = [(partido["homeId"], partido["home"]), (partido["awayId"], partido["away"])]
-    picks = mejores_picks_partido(equipos, season)
+    picks = mejores_picks_partido(equipos, season, lesionados)
 
     for stat_key in ("points", "three_made", "assists", "rebounds_tot"):
         candidatos = picks.get(stat_key)
@@ -174,6 +175,8 @@ def construir_absorciones_partido(partido: dict, lesionados: dict, season: int) 
     conn = sqlite3.connect("apuestas.db")
 
     for team_id, team_name in ((partido["homeId"], partido["home"]), (partido["awayId"], partido["away"])):
+        jugadores_out_equipo = {b["jugador"] for b in lesionados.get(team_name, []) if b["estado"] == "Out"}
+
         for baja in lesionados.get(team_name, []):
             if baja["estado"] != "Out":
                 continue
@@ -184,6 +187,9 @@ def construir_absorciones_partido(partido: dict, lesionados: dict, season: int) 
                 continue  # no lo pudimos cruzar con nuestra base (ej. apodo distinto a ESPN)
 
             candidatos = companeros_que_podrian_absorber(team_id, fila[0], season, stat="points")
+            # El compañero recomendado tampoco puede estar confirmado Out
+            # (podría ser otro jugador lesionado que ya estaba fuera antes).
+            candidatos = [c for c in candidatos if c["playerName"] not in jugadores_out_equipo]
             if not candidatos or candidatos[0]["diferencia"] < DIFERENCIA_MINIMA_ABSORCION:
                 continue
 
@@ -198,7 +204,10 @@ def construir_absorciones_partido(partido: dict, lesionados: dict, season: int) 
 
 
 def construir_mensajes(partidos: list[dict], fecha_hoy: str, season: int, lesionados: dict) -> list[str]:
-    encabezado = f"🏀 *Pronósticos NBA de hoy* 🏀\n🗓️ {formatear_fecha(fecha_hoy)}\n"
+    encabezado = (
+        f"🏀 *Pronósticos NBA de hoy* 🏀\n🗓️ {formatear_fecha(fecha_hoy)}\n"
+        f"_DD/TD considera puntos + rebotes + asistencias (sin robos/tapones, no disponibles en esta fuente)._\n"
+    )
 
     if not partidos:
         return [encabezado + "\nNo encontramos partidos NBA con datos suficientes para hoy. 📭"]

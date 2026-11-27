@@ -5,11 +5,14 @@ asistencias, rebotes) calcula una línea cercana al promedio del jugador y el
 Se calcula 100% desde nba_player_game_stats + nba_games (apuestas.db); lo
 reutiliza enviar_telegram_basquet.py.
 
-La línea de cada stat se fija "justo debajo" del promedio redondeado del
-jugador (ver _linea_desde_promedio) — igual que un mercado de casa de
-apuestas suele poner la línea cerca del promedio real, en vez de usar un
-número fijo para todos los jugadores (a diferencia de la línea de puntos
-totales de equipo en analizar_basquet.py, que sí es fija para todos).
+La línea de cada stat se fija con un margen real debajo del promedio del
+jugador (ver _linea_desde_promedio), no pegada al promedio — una línea
+puesta justo en el promedio da ~50% de probabilidad sin importar lo
+dominante que sea el jugador (la mitad de sus partidos quedan arriba, la
+mitad abajo, por pura definición de promedio). Con margen, un anotador
+consistente de alto volumen (ej. 34 puntos de promedio) sí aparece con
+una probabilidad alta de "sí calificarla" — que es lo que lo hace un pick
+atractivo — en vez de quedar en un empate técnico.
 
 Ejecutar manualmente para ver un reporte de candidatos por consola:
     python analizar_jugadores_basquet.py
@@ -28,12 +31,15 @@ STATS_JUGADOR = {
 }
 
 
+FACTOR_LINEA = 0.85  # margen real bajo el promedio (ver docstring del módulo)
+
+
 def _linea_desde_promedio(promedio: float) -> float:
-    """Línea .5 apenas debajo del promedio, redondeado al medio punto más
-    cercano (ej: promedio 24.3 -> línea 24.0; promedio 24.8 -> línea 24.5).
-    Nunca baja de 0.5: una línea <= 0 no es un mercado real (un stat que
-    siempre es >= 0 la cumpliría siempre, dando un "100%" sin sentido)."""
-    return max(0.5, round(promedio * 2) / 2 - 0.5)
+    """Línea .5 con margen real bajo el promedio (ej: promedio 33.9 ->
+    línea 28.5, no 33.5). Nunca baja de 0.5: una línea <= 0 no es un
+    mercado real (un stat que siempre es >= 0 la cumpliría siempre, dando
+    un "100%" sin sentido)."""
+    return max(0.5, round(promedio * FACTOR_LINEA * 2) / 2 - 0.5)
 
 
 def _partidos_jugador(player_id: int, season: int) -> list[sqlite3.Row]:
@@ -116,7 +122,7 @@ PROMEDIO_MINIMO_STAT = {
 }
 
 
-def mejores_picks_partido(equipos: list[tuple[int, str]], season: int) -> dict:
+def mejores_picks_partido(equipos: list[tuple[int, str]], season: int, lesionados: dict | None = None) -> dict:
     """Decisión de analista: TODOS los jugadores (de cualquiera de los dos
     equipos) que superan UMBRAL_PICK_PARTIDO en cada indicador (puntos,
     triples, asistencias, rebotes, doble-doble, triple-doble) y además
@@ -124,22 +130,53 @@ def mejores_picks_partido(equipos: list[tuple[int, str]], season: int) -> dict:
     ordenados de mayor a menor probabilidad — no uno solo, para no dejar
     afuera a otro jugador que también es un pick seguro. Si nadie califica
     en un indicador, esa categoría queda vacía en vez de forzar un pick de
-    baja confianza o irrelevante."""
+    baja confianza o irrelevante.
+
+    `lesionados` (mismo formato que lesionados_nba.obtener_lesionados()) es
+    obligatorio en la práctica: un jugador confirmado "Out" se excluye por
+    completo — no tiene sentido recomendar una apuesta sobre alguien que no
+    va a jugar. Los "Day-To-Day" sí se incluyen (pueden jugar) pero quedan
+    marcados con "alerta" para que se avise la duda en vez de esconderla."""
+    lesionados = lesionados or {}
+
+    def _estado_jugador(team_name: str, nombre: str) -> str | None:
+        bajas_equipo = lesionados.get(team_name, [])
+        for baja in bajas_equipo:
+            if baja["jugador"] == nombre:
+                return baja["estado"]
+
+        # Fallback por apellido: ESPN a veces usa un apodo como primer
+        # nombre (ej. "Anunoby OG" vs "Anunoby Ogugua" en nuestra base) y
+        # el match exacto falla aunque sea la misma persona. Solo se usa
+        # si el apellido es único en la lista de bajas del equipo, para no
+        # confundir a dos jugadores distintos con el mismo apellido.
+        apellido = nombre.split()[0]
+        coincidencias = [b for b in bajas_equipo if b["jugador"].split()[0] == apellido]
+        if len(coincidencias) == 1:
+            return coincidencias[0]["estado"]
+        return None
+
     candidatos_stat = {stat_key: [] for stat_key in STATS_JUGADOR}
     candidatos_dd, candidatos_td = [], []
 
     for team_id, team_name in equipos:
         for perfil in jugadores_del_equipo(team_id, season):
+            estado = _estado_jugador(team_name, perfil["playerName"])
+            if estado == "Out":
+                continue  # confirmado afuera: no tiene sentido recomendarlo
+
+            alerta = {"alerta": estado} if estado else {}
+
             for stat_key in STATS_JUGADOR:
                 datos = perfil["props"].get(stat_key)
                 if datos is not None and datos["promedio"] >= PROMEDIO_MINIMO_STAT[stat_key]:
                     candidatos_stat[stat_key].append(
-                        {"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": datos["overPct"], **datos}
+                        {"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": datos["overPct"], **datos, **alerta}
                     )
             if perfil["doubleDoublePct"] > 0:
-                candidatos_dd.append({"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": perfil["doubleDoublePct"]})
+                candidatos_dd.append({"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": perfil["doubleDoublePct"], **alerta})
             if perfil["tripleDoublePct"] > 0:
-                candidatos_td.append({"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": perfil["tripleDoublePct"]})
+                candidatos_td.append({"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": perfil["tripleDoublePct"], **alerta})
 
     def _filtrar(candidatos: list[dict]) -> list[dict]:
         calificados = [c for c in candidatos if c["probabilidad"] >= UMBRAL_PICK_PARTIDO]

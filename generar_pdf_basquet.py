@@ -26,6 +26,17 @@ ETIQUETAS_STAT = {
     "triple_doble": "Triple-doble",
 }
 
+# Un color de fondo por indicador, para diferenciarlos de un vistazo en la
+# tabla de picks (todas igual de claras para no tapar el texto negro).
+COLOR_POR_INDICADOR = {
+    "Puntos": (217, 235, 255),
+    "Triples": (221, 245, 221),
+    "Asistencias": (255, 245, 204),
+    "Rebotes": (255, 228, 214),
+    "Doble-doble": (233, 222, 247),
+    "Triple-doble": (247, 222, 237),
+}
+
 DIAS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 MESES_ES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -67,6 +78,26 @@ def _tabla(pdf: FPDF, encabezados: list[str], anchos: list[float], filas: list[l
     pdf.ln(3)
 
 
+def _tabla_coloreada_por_indicador(pdf: FPDF, encabezados: list[str], anchos: list[float], filas: list[list[str]]) -> None:
+    """Igual que _tabla, pero pinta cada fila según su columna 0
+    (Indicador) usando COLOR_POR_INDICADOR — así se distinguen puntos,
+    triples, asistencias y rebotes de un vistazo."""
+    pdf.set_font("helvetica", "B", 9)
+    pdf.set_fill_color(245, 245, 245)
+    for encabezado, ancho in zip(encabezados, anchos):
+        pdf.cell(ancho, 6.5, encabezado, border=1, fill=True, align="C")
+    pdf.ln()
+
+    pdf.set_font("helvetica", "", 9)
+    for fila in filas:
+        color = COLOR_POR_INDICADOR.get(fila[0], (255, 255, 255))
+        pdf.set_fill_color(*color)
+        for valor, ancho in zip(fila, anchos):
+            pdf.cell(ancho, 6, str(valor), border=1, align="C", fill=True)
+        pdf.ln()
+    pdf.ln(3)
+
+
 def _texto_pick_equipo(pick: dict | None) -> str:
     if pick is None:
         return "Partido parejo - sin pick de equipo confiable"
@@ -79,6 +110,8 @@ def _filas_absorcion(partido: dict, lesionados: dict, season: int) -> list[list[
     filas = []
     conn = sqlite3.connect("apuestas.db")
     for team_id, team_name in ((partido["homeId"], partido["home"]), (partido["awayId"], partido["away"])):
+        jugadores_out_equipo = {b["jugador"] for b in lesionados.get(team_name, []) if b["estado"] == "Out"}
+
         for baja in lesionados.get(team_name, []):
             if baja["estado"] != "Out":
                 continue
@@ -88,6 +121,8 @@ def _filas_absorcion(partido: dict, lesionados: dict, season: int) -> list[list[
             if fila is None:
                 continue
             candidatos = companeros_que_podrian_absorber(team_id, fila[0], season, stat="points")
+            # El compañero recomendado tampoco puede estar confirmado Out.
+            candidatos = [c for c in candidatos if c["playerName"] not in jugadores_out_equipo]
             if not candidatos or candidatos[0]["diferencia"] < DIFERENCIA_MINIMA_ABSORCION:
                 continue
             mejor = candidatos[0]
@@ -114,15 +149,16 @@ def _seccion_partido(pdf: FPDF, partido: dict, season: int, lesionados: dict) ->
     pdf.ln(2)
 
     equipos = [(partido["homeId"], partido["home"]), (partido["awayId"], partido["away"])]
-    picks = mejores_picks_partido(equipos, season)
+    picks = mejores_picks_partido(equipos, season, lesionados)
 
     filas_picks = []
     for stat_key in ("points", "three_made", "assists", "rebounds_tot"):
         for candidato in picks.get(stat_key, []):
+            nombre = candidato["jugador"] + (f" ({candidato['alerta']})" if candidato.get("alerta") else "")
             filas_picks.append(
                 [
                     ETIQUETAS_STAT[stat_key],
-                    candidato["jugador"],
+                    nombre,
                     candidato["equipo"].split()[-1],
                     f"{candidato['promedio']:.1f}",
                     f"{candidato['linea']:.1f}",
@@ -130,14 +166,15 @@ def _seccion_partido(pdf: FPDF, partido: dict, season: int, lesionados: dict) ->
                 ]
             )
     if filas_picks:
-        _tabla(pdf, ["Indicador", "Jugador", "Equipo", "Promedio", "Línea", "Prob."], [40, 55, 35, 30, 30, 25], filas_picks)
+        _tabla_coloreada_por_indicador(pdf, ["Indicador", "Jugador", "Equipo", "Promedio", "Línea", "Prob."], [40, 55, 35, 30, 30, 25], filas_picks)
 
     filas_dobles = []
     for clave in ("doble_doble", "triple_doble"):
         for candidato in picks.get(clave, []):
-            filas_dobles.append([ETIQUETAS_STAT[clave], candidato["jugador"], candidato["equipo"].split()[-1], f"{candidato['probabilidad']:.0f}%"])
+            nombre = candidato["jugador"] + (f" ({candidato['alerta']})" if candidato.get("alerta") else "")
+            filas_dobles.append([ETIQUETAS_STAT[clave], nombre, candidato["equipo"].split()[-1], f"{candidato['probabilidad']:.0f}%"])
     if filas_dobles:
-        _tabla(pdf, ["Indicador", "Jugador", "Equipo", "Prob."], [40, 70, 50, 55], filas_dobles)
+        _tabla_coloreada_por_indicador(pdf, ["Indicador", "Jugador", "Equipo", "Prob."], [40, 70, 50, 55], filas_dobles)
 
     filas_bajas = []
     for team_name in (partido["home"], partido["away"]):
@@ -162,6 +199,8 @@ def generar_pdf(ruta: str, partidos: list[dict], fecha_hoy: str, lesionados: dic
     pdf.cell(0, 12, "Pronósticos NBA de hoy", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("helvetica", "", 11)
     pdf.cell(0, 8, formatear_fecha(fecha_hoy), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "I", 9)
+    pdf.cell(0, 6, "DD/TD considera puntos + rebotes + asistencias (sin robos/tapones, no disponibles en esta fuente).", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
     if not partidos:
