@@ -30,8 +30,10 @@ STATS_JUGADOR = {
 
 def _linea_desde_promedio(promedio: float) -> float:
     """Línea .5 apenas debajo del promedio, redondeado al medio punto más
-    cercano (ej: promedio 24.3 -> línea 24.0; promedio 24.8 -> línea 24.5)."""
-    return round(promedio * 2) / 2 - 0.5
+    cercano (ej: promedio 24.3 -> línea 24.0; promedio 24.8 -> línea 24.5).
+    Nunca baja de 0.5: una línea <= 0 no es un mercado real (un stat que
+    siempre es >= 0 la cumpliría siempre, dando un "100%" sin sentido)."""
+    return max(0.5, round(promedio * 2) / 2 - 0.5)
 
 
 def _partidos_jugador(player_id: int, season: int) -> list[sqlite3.Row]:

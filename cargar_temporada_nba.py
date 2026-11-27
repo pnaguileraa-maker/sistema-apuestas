@@ -1,17 +1,11 @@
 """
-Descarga equipos y partidos de la NBA (temporada regular + playoffs, vía
-league=standard) usando API-NBA y los guarda en apuestas.db
-(nba_teams / nba_games).
-
-SIN VERIFICAR CONTRA LA API REAL todavía (ver nba_api_client.py): se asume
-que /games usa teams.home / teams.visitors (terminología típica de NBA,
-distinta del home/away de API-Football) y que scores.home.points /
-scores.visitors.points traen el puntaje final. Correr primero
-`python debug_nba_api.py` con la NBA_API_KEY real y comparar antes de
-confiar en una corrida completa.
+Descarga equipos y partidos de la NBA (liga id 12 en API-Basketball) y los
+guarda en apuestas.db (nba_teams / nba_games). Una sola llamada trae la
+temporada completa (~1400 partidos, confirmado con el plan Pro) — no hace
+falta pedirla equipo por equipo.
 
 Ejecutar:
-    python cargar_temporada_nba.py [season]
+    python cargar_temporada_nba.py [season]   # season como "2025-2026"
 """
 
 import sqlite3
@@ -19,18 +13,20 @@ import sys
 from datetime import date
 
 from crear_db_basquet import inicializar_base_datos_basquet
-from nba_api_client import get_nba
+from nba_api_client import LEAGUE_ID_NBA, get_nba
 
 
-def temporada_actual_nba() -> int:
-    """La temporada NBA arranca en octubre; antes de eso seguimos
-    considerando vigente la temporada iniciada el año anterior."""
+def temporada_actual_nba() -> str:
+    """La temporada NBA arranca en octubre y se nombra "AÑO-AÑO+1"
+    (ej. "2025-2026"); antes de octubre seguimos considerando vigente la
+    temporada iniciada el año anterior."""
     hoy = date.today()
-    return hoy.year if hoy.month >= 9 else hoy.year - 1
+    inicio = hoy.year if hoy.month >= 9 else hoy.year - 1
+    return f"{inicio}-{inicio + 1}"
 
 
-def guardar_equipos() -> None:
-    equipos = get_nba("teams", {"league": "standard"})
+def guardar_equipos(season: str) -> None:
+    equipos = get_nba("teams", {"league": LEAGUE_ID_NBA, "season": season})
     conn = sqlite3.connect("apuestas.db")
     cursor = conn.cursor()
     for equipo in equipos:
@@ -43,8 +39,8 @@ def guardar_equipos() -> None:
     print(f"{len(equipos)} equipos NBA guardados.")
 
 
-def guardar_partidos(season: int) -> None:
-    partidos = get_nba("games", {"season": season, "league": "standard"})
+def guardar_partidos(season: str) -> None:
+    partidos = get_nba("games", {"league": LEAGUE_ID_NBA, "season": season})
     if not partidos:
         print(f"No se encontraron partidos NBA para la temporada {season}.")
         return
@@ -55,7 +51,7 @@ def guardar_partidos(season: int) -> None:
     guardados = 0
     for partido in partidos:
         home = partido["teams"]["home"]
-        visitante = partido["teams"]["visitors"]
+        away = partido["teams"]["away"]
 
         cursor.execute(
             "INSERT OR REPLACE INTO nba_teams (id, name) VALUES (?, ?)",
@@ -63,7 +59,7 @@ def guardar_partidos(season: int) -> None:
         )
         cursor.execute(
             "INSERT OR REPLACE INTO nba_teams (id, name) VALUES (?, ?)",
-            (visitante["id"], visitante["name"]),
+            (away["id"], away["name"]),
         )
 
         cursor.execute(
@@ -74,13 +70,13 @@ def guardar_partidos(season: int) -> None:
             """,
             (
                 partido["id"],
-                partido["date"]["start"],
+                partido["date"],
                 season,
                 home["id"],
-                visitante["id"],
+                away["id"],
                 partido["status"]["long"],
-                partido["scores"]["home"]["points"],
-                partido["scores"]["visitors"]["points"],
+                partido["scores"]["home"]["total"],
+                partido["scores"]["away"]["total"],
             ),
         )
         guardados += 1
@@ -90,14 +86,14 @@ def guardar_partidos(season: int) -> None:
     print(f"{guardados} partidos NBA guardados para la temporada {season}.")
 
 
-def cargar_temporada_nba(season: int | None = None) -> None:
+def cargar_temporada_nba(season: str | None = None) -> None:
     season = season or temporada_actual_nba()
     print(f"NBA, temporada {season}")
     inicializar_base_datos_basquet()
-    guardar_equipos()
+    guardar_equipos(season)
     guardar_partidos(season)
 
 
 if __name__ == "__main__":
-    season_arg = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    season_arg = sys.argv[1] if len(sys.argv) > 1 else None
     cargar_temporada_nba(season_arg)

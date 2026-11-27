@@ -1,69 +1,50 @@
 """
-Script de UNA SOLA VEZ para confirmar, contra la API real, los nombres de
-campo exactos que devuelve API-NBA (api-sports.io) antes de construir el
-parser definitivo de ingesta (cargar_temporada_nba.py /
-actualizar_estadisticas_jugadores_nba.py).
-
-No hace falta adivinar la forma del JSON: este script pega contra varios
-endpoints candidatos y vuelca la respuesta cruda (o el error, que en
-api-sports.io suele ser descriptivo) para poder mapear los campos reales.
-
-Requiere NBA_API_KEY en el .env (suscripción a API-NBA en api-sports.io,
-producto aparte de API_FOOTBALL_KEY).
+Smoke-test manual contra la API real de NBA (API-Basketball, liga id 12) —
+útil si algo en la ingesta empieza a fallar y hay que confirmar rápido que
+la API sigue devolviendo lo esperado (plan activo, forma del JSON sin
+cambios, etc.).
 
 Ejecutar:
-    python debug_nba_api.py [YYYY-MM-DD]   # por defecto, hoy
+    python debug_nba_api.py [YYYY-MM-DD]   # por defecto, mañana
 """
 
 import json
-import os
 import sys
-from datetime import date
+from datetime import date, timedelta
 
-import requests
-from dotenv import load_dotenv
-
-load_dotenv()
-
-API_KEY = os.environ["NBA_API_KEY"]
-BASE_URL = "https://v2.nba.api-sports.io"
-headers = {"x-apisports-key": API_KEY}
+from nba_api_client import LEAGUE_ID_NBA, get_nba
+from cargar_temporada_nba import temporada_actual_nba
 
 
-def dump(titulo: str, respuesta: requests.Response) -> None:
+def dump(titulo: str, datos) -> None:
     print(f"\n{'=' * 70}\n{titulo}\n{'=' * 70}")
-    print(f"HTTP {respuesta.status_code}")
-    try:
-        datos = respuesta.json()
-    except ValueError:
-        print(respuesta.text[:1000])
-        return
-    print(json.dumps(datos, indent=2, ensure_ascii=False)[:4000])
+    print(json.dumps(datos, indent=2, ensure_ascii=False)[:3000])
 
 
 def main() -> None:
-    fecha = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
+    fecha = sys.argv[1] if len(sys.argv) > 1 else (date.today() + timedelta(days=1)).isoformat()
+    season = temporada_actual_nba()
 
-    r_games = requests.get(f"{BASE_URL}/games", headers=headers, params={"date": fecha})
-    dump(f"/games?date={fecha}", r_games)
+    equipos = get_nba("teams", {"league": LEAGUE_ID_NBA, "season": season})
+    dump(f"/teams (temporada {season})", equipos[:2])
 
-    juegos = r_games.json().get("response", [])
-    game_id = juegos[0]["id"] if juegos else None
+    juegos = get_nba("games", {"league": LEAGUE_ID_NBA, "season": season, "date": fecha})
+    dump(f"/games?date={fecha}", juegos[:2])
 
-    r_teams = requests.get(f"{BASE_URL}/teams", headers=headers, params={"league": "standard"})
-    dump("/teams?league=standard", r_teams)
+    juego_terminado = next(
+        (
+            get_nba("games", {"league": LEAGUE_ID_NBA, "season": season, "team": equipo["id"]})
+            for equipo in equipos[:1]
+        ),
+        [],
+    )
+    juego_con_boxscore = next((g for g in juego_terminado if g["status"]["long"] == "Game Finished"), None)
 
-    if game_id:
-        dump(
-            f"/games/statistics?id={game_id} (stats de EQUIPO del partido)",
-            requests.get(f"{BASE_URL}/games/statistics", headers=headers, params={"id": game_id}),
-        )
-        dump(
-            f"/players/statistics?game={game_id} (candidato a box score por JUGADOR)",
-            requests.get(f"{BASE_URL}/players/statistics", headers=headers, params={"game": game_id}),
-        )
+    if juego_con_boxscore:
+        gid = juego_con_boxscore["id"]
+        dump(f"/games/statistics/players?id={gid}", get_nba("games/statistics/players", {"id": gid})[:3])
     else:
-        print(f"\nNo hay partidos para la fecha {fecha}; probá con una fecha donde sí haya juegos de NBA.")
+        print("\nNo se encontró ningún partido terminado para probar el boxscore de jugadores.")
 
 
 if __name__ == "__main__":

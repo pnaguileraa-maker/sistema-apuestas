@@ -88,7 +88,12 @@ def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
     if casa is None or visita is None or casa["played"] < MIN_PARTIDOS_PERFIL or visita["played"] < MIN_PARTIDOS_PERFIL:
         return None
 
-    if casa["winPct"] >= visita["winPct"]:
+    # Si ambos equipos tienen menos de 50% de victorias en su rol, ninguno
+    # es un favorito real — mostrar el "menos malo" como pick induciría a
+    # error (parecería una recomendación confiada sin serlo).
+    if casa["winPct"] < 50.0 and visita["winPct"] < 50.0:
+        moneyline = None
+    elif casa["winPct"] >= visita["winPct"]:
         moneyline = {"equipo": perfil_home["teamName"], "probabilidad": casa["winPct"]}
     else:
         moneyline = {"equipo": perfil_away["teamName"], "probabilidad": visita["winPct"]}

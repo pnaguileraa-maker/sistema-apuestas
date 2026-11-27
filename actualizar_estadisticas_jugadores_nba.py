@@ -1,11 +1,14 @@
 """
 Rellena el boxscore por jugador de cada partido NBA terminado, llamando a
-/players/statistics?game=<id> de API-NBA (api-sports.io), y calcula
-double_double / triple_double a partir de los conteos de puntos, rebotes
-totales, asistencias, robos y tapones.
+/games/statistics/players?id=<game_id> de API-Basketball (api-sports.io).
 
-SIN VERIFICAR CONTRA LA API REAL todavía — ver aviso en nba_api_client.py.
-Correr `python debug_nba_api.py` primero con la NBA_API_KEY real.
+Esta API NO trae robos ni tapones por jugador (solo field_goals,
+threepoint_goals, freethrows_goals, rebounds.total, assists y points), así
+que double_double/triple_double se calculan aproximando con 3 categorías
+en vez de las 5 oficiales (puntos, rebotes totales, asistencias) — cubre
+la gran mayoría de los casos reales pero no el 100%. Decisión explícita
+del usuario (2026-11-27) para no pagar una suscripción aparte a API-NBA
+solo por esas dos categorías.
 
 ⚠️ Consume cuota de la API: una llamada por partido pendiente. Solo procesa
 partidos sin stats_checked = 1, así que es seguro detenerlo y reanudarlo.
@@ -20,7 +23,7 @@ import time
 from nba_api_client import get_nba
 
 SEGUNDOS_ENTRE_LLAMADAS = 0.3
-CATEGORIAS_DOBLE = ("points", "totReb", "assists", "steals", "blocks")
+ESTADOS_TERMINADO = ("Game Finished", "After Over Time")
 
 
 def asegurar_columna_stats_checked(conn: sqlite3.Connection) -> None:
@@ -31,8 +34,8 @@ def asegurar_columna_stats_checked(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
-def contar_doble_triple(fila: dict) -> tuple[int, int]:
-    categorias_en_doble_digito = sum(1 for cat in CATEGORIAS_DOBLE if (fila.get(cat) or 0) >= 10)
+def contar_doble_triple(puntos: int, rebotes: int, asistencias: int) -> tuple[int, int]:
+    categorias_en_doble_digito = sum(1 for valor in (puntos, rebotes, asistencias) if valor >= 10)
     return int(categorias_en_doble_digito >= 2), int(categorias_en_doble_digito >= 3)
 
 
@@ -44,8 +47,9 @@ def actualizar_estadisticas_jugadores() -> None:
     cursor.execute(
         """
         SELECT id FROM nba_games
-        WHERE status = 'Finished' AND (stats_checked IS NULL OR stats_checked = 0)
-        """
+        WHERE status IN (?, ?) AND (stats_checked IS NULL OR stats_checked = 0)
+        """,
+        ESTADOS_TERMINADO,
     )
     pendientes = [fila[0] for fila in cursor.fetchall()]
 
@@ -57,17 +61,21 @@ def actualizar_estadisticas_jugadores() -> None:
     print(f"Actualizando boxscore de jugadores de {len(pendientes)} partidos NBA...")
 
     for indice, game_id in enumerate(pendientes, start=1):
-        filas = get_nba("players/statistics", {"game": game_id})
+        filas = get_nba("games/statistics/players", {"id": game_id})
 
         for fila in filas:
-            doble, triple = contar_doble_triple(fila)
+            puntos = fila.get("points") or 0
+            rebotes = (fila.get("rebounds") or {}).get("total") or 0
+            asistencias = fila.get("assists") or 0
+            doble, triple = contar_doble_triple(puntos, rebotes, asistencias)
+
             jugador = fila["player"]
             equipo = fila["team"]
-            nombre = f"{jugador['firstname']} {jugador['lastname']}"
+            triples = fila.get("threepoint_goals") or {}
 
             cursor.execute(
                 "INSERT OR REPLACE INTO nba_players (id, name, team_id) VALUES (?, ?, ?)",
-                (jugador["id"], nombre, equipo["id"]),
+                (jugador["id"], jugador["name"], equipo["id"]),
             )
             cursor.execute(
                 """
@@ -79,10 +87,10 @@ def actualizar_estadisticas_jugadores() -> None:
                 """,
                 (
                     game_id, jugador["id"], equipo["id"],
-                    fila.get("points"), fila.get("tpm"), fila.get("tpa"), fila.get("assists"),
-                    fila.get("offReb"), fila.get("defReb"), fila.get("totReb"),
-                    fila.get("steals"), fila.get("blocks"), fila.get("turnovers"),
-                    fila.get("min"), doble, triple,
+                    puntos, triples.get("total"), triples.get("attempts"), asistencias,
+                    None, None, rebotes,
+                    None, None, None,
+                    fila.get("minutes"), doble, triple,
                 ),
             )
 

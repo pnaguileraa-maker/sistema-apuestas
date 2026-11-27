@@ -38,27 +38,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python enviar_telegram.py
 
-      # Los pasos de NBA se saltan solos mientras no exista el secret
-      # NBA_API_KEY (suscripción aparte en api-sports.io a API-NBA) y nunca
-      # bloquean el reporte de fútbol de arriba ni el commit de abajo:
-      # continue-on-error evita que un fallo puntual de la ingesta NBA
-      # tumbe el resto del job.
+      # NBA usa API-Basketball (liga id 12), mismo API_FOOTBALL_KEY que el
+      # fútbol (api-sports.io comparte una sola key por cuenta). continue-on-error
+      # evita que un fallo puntual de la ingesta NBA tumbe el resto del job
+      # (el reporte de fútbol de arriba y el commit de abajo).
       - name: Actualizar partidos y equipos NBA
-        if: ${{ secrets.NBA_API_KEY != '' }}
         continue-on-error: true
         env:
-          NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python cargar_temporada_nba.py
 
       - name: Actualizar estadísticas de jugadores NBA
-        if: ${{ secrets.NBA_API_KEY != '' }}
         continue-on-error: true
         env:
-          NBA_API_KEY: ${{ secrets.NBA_API_KEY }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python actualizar_estadisticas_jugadores_nba.py
 
       - name: Enviar el reporte NBA a Telegram
-        if: ${{ secrets.NBA_API_KEY != '' }}
         continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

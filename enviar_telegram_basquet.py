@@ -82,6 +82,7 @@ def partidos_de_manana() -> tuple[list[dict], str, int]:
         JOIN nba_teams h ON h.id = g.home_team_id
         JOIN nba_teams a ON a.id = g.away_team_id
         WHERE g.season = ? AND date(g.date) = ? AND g.home_points IS NULL
+          AND g.status != 'Cancelled'
         """,
         (season, manana),
     ).fetchall()
@@ -107,11 +108,16 @@ def partidos_de_manana() -> tuple[list[dict], str, int]:
 
 def construir_bloque_partido(partido: dict, season: int) -> str:
     pronostico = partido["pronostico"]
-    lineas = [
-        f"🏀 *{partido['home']} vs {partido['away']}*",
-        f"   • 💰 Moneyline: *{pronostico['moneyline']['equipo']}* — *{pronostico['moneyline']['probabilidad']:.0f}%*",
-        f"   • 📊 Más de {pronostico['puntosTotales']['linea']} puntos totales — *{pronostico['puntosTotales']['overPct']:.0f}%*",
-    ]
+    lineas = [f"🏀 *{partido['home']} vs {partido['away']}*"]
+
+    if pronostico["moneyline"] is not None:
+        lineas.append(
+            f"   • 💰 Moneyline: *{pronostico['moneyline']['equipo']}* — *{pronostico['moneyline']['probabilidad']:.0f}%*"
+        )
+
+    lineas.append(
+        f"   • 📊 Más de {pronostico['puntosTotales']['linea']} puntos totales — *{pronostico['puntosTotales']['overPct']:.0f}%*"
+    )
 
     for team_id in (partido["homeId"], partido["awayId"]):
         for jugador in jugadores_destacados(team_id, season, JUGADORES_DESTACADOS_POR_EQUIPO):
