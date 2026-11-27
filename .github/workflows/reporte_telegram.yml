@@ -32,11 +32,11 @@ jobs:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python actualizar_todas_las_ligas.py
 
-      - name: Enviar el reporte a Telegram
+      - name: Enviar el reporte a Telegram (PDF)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python enviar_telegram.py
+        run: python enviar_telegram_futbol.py
 
       - name: Guardar apuestas.db actualizada en el repo
         run: |

@@ -103,14 +103,27 @@ def descargar_y_guardar_partidos(league_id, season):
 
         home_goals = match['goals']['home']
         away_goals = match['goals']['away']
+        home_goals_ht = match['score']['halftime']['home']
+        away_goals_ht = match['score']['halftime']['away']
 
         cursor.execute("INSERT OR REPLACE INTO teams (id, name) VALUES (?, ?)", (home_team_id, home_team_name))
         cursor.execute("INSERT OR REPLACE INTO teams (id, name) VALUES (?, ?)", (away_team_id, away_team_name))
 
+        # UPSERT en vez de INSERT OR REPLACE: este último borra la fila y la
+        # vuelve a crear solo con las columnas listadas acá, lo que resetea
+        # a NULL/0 los córners, tarjetas, tiros al arco y stats_checked que
+        # ya hubiera cargado actualizar_estadisticas_partidos.py en una
+        # corrida anterior. Con ON CONFLICT DO UPDATE solo se tocan las
+        # columnas de este INSERT, el resto de la fila queda intacta.
         cursor.execute("""
-            INSERT OR REPLACE INTO matches (id, date, league_id, season, home_team_id, away_team_id, status, home_goals, away_goals)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (match_id, date_, league_id, season_, home_team_id, away_team_id, status, home_goals, away_goals))
+            INSERT INTO matches (id, date, league_id, season, home_team_id, away_team_id, status, home_goals, away_goals, home_goals_ht, away_goals_ht)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                date=excluded.date, league_id=excluded.league_id, season=excluded.season,
+                home_team_id=excluded.home_team_id, away_team_id=excluded.away_team_id,
+                status=excluded.status, home_goals=excluded.home_goals, away_goals=excluded.away_goals,
+                home_goals_ht=excluded.home_goals_ht, away_goals_ht=excluded.away_goals_ht
+        """, (match_id, date_, league_id, season_, home_team_id, away_team_id, status, home_goals, away_goals, home_goals_ht, away_goals_ht))
 
         guardados += 1
 
