@@ -13,6 +13,8 @@ import sqlite3
 MIN_PARTIDOS_PERFIL = 10  # muestra mínima para confiar en un % (home o away)
 LINEA_PUNTOS_TOTALES = 220.5  # línea de referencia para "más de N puntos" entre ambos equipos
 UMBRAL_CANDIDATO = 65.0  # % mínimo (win rate u over rate) para aparecer en el reporte
+UMBRAL_MONEYLINE_CONFIABLE = 55.0  # bajo esto, ningún equipo es un favorito real para apostar moneyline
+MARGEN_MINIMO_CONFIABLE = 1.0  # diferencia de puntos bajo esto no es una señal real (partido parejo)
 
 
 def _resumen_splits(partidos: list[dict]) -> dict | None:
@@ -101,6 +103,26 @@ def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
         "away": {"nombre": perfil_away["teamName"], "moneyline": visita["winPct"], "margen": visita["pointsDiffAvg"]},
         "puntosTotales": {"linea": LINEA_PUNTOS_TOTALES, "overPct": puntos_total_pct},
     }
+
+
+def mejor_pick_equipo(pronostico: dict) -> dict | None:
+    """Decisión de analista: un solo pick de equipo por partido. Si algún
+    equipo es favorito real (moneyline >= UMBRAL_MONEYLINE_CONFIABLE), se
+    apuesta a su victoria; si el partido está parejo (ningún equipo llega
+    al umbral), se prefiere la diferencia de puntos del más competitivo de
+    los dos — más fácil de acertar en un partido reñido que elegir
+    ganador. None si ni el moneyline ni el margen dan una señal real (ej.
+    diferencia de puntos ~0) — mejor no mostrar un pick que no vale nada."""
+    home, away = pronostico["home"], pronostico["away"]
+    mejor_moneyline = home if home["moneyline"] >= away["moneyline"] else away
+
+    if mejor_moneyline["moneyline"] >= UMBRAL_MONEYLINE_CONFIABLE:
+        return {"tipo": "moneyline", "equipo": mejor_moneyline["nombre"], "valor": mejor_moneyline["moneyline"]}
+
+    mejor_margen = home if home["margen"] >= away["margen"] else away
+    if abs(mejor_margen["margen"]) < MARGEN_MINIMO_CONFIABLE:
+        return None
+    return {"tipo": "margen", "equipo": mejor_margen["nombre"], "valor": mejor_margen["margen"]}
 
 
 def analizar_candidatos_moneyline(season: int) -> None:

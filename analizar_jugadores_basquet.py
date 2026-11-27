@@ -92,6 +92,66 @@ def perfil_jugador_nba(player_id: int, season: int) -> dict | None:
     }
 
 
+def jugadores_del_equipo(team_id: int, season: int) -> list[dict]:
+    """Perfil de todos los jugadores del equipo con muestra suficiente."""
+    conn = sqlite3.connect("apuestas.db")
+    jugadores = conn.execute("SELECT id FROM nba_players WHERE team_id = ?", (team_id,)).fetchall()
+    conn.close()
+    return [p for (player_id,) in jugadores if (p := perfil_jugador_nba(player_id, season)) is not None]
+
+
+UMBRAL_PICK_PARTIDO = 55.0  # % mínimo para que un jugador cuente como pick seguro de un indicador
+MAX_PICKS_POR_STAT = 4  # tope por indicador para no listar a todo el plantel que raspa el umbral
+
+# Promedio mínimo para que el indicador sea relevante — sin esto, un
+# suplente que promedia 1.7 puntos "supera el 70%" una línea de 1.0, lo
+# cual es estadísticamente cierto pero no es un pick de puntos que le
+# sirva a nadie. Valores aproximados a lo que un analista consideraría
+# "producción real" en cada categoría.
+PROMEDIO_MINIMO_STAT = {
+    "points": 10.0,
+    "three_made": 1.5,
+    "assists": 3.0,
+    "rebounds_tot": 4.0,
+}
+
+
+def mejores_picks_partido(equipos: list[tuple[int, str]], season: int) -> dict:
+    """Decisión de analista: TODOS los jugadores (de cualquiera de los dos
+    equipos) que superan UMBRAL_PICK_PARTIDO en cada indicador (puntos,
+    triples, asistencias, rebotes, doble-doble, triple-doble) y además
+    tienen un promedio real en esa categoría (ver PROMEDIO_MINIMO_STAT),
+    ordenados de mayor a menor probabilidad — no uno solo, para no dejar
+    afuera a otro jugador que también es un pick seguro. Si nadie califica
+    en un indicador, esa categoría queda vacía en vez de forzar un pick de
+    baja confianza o irrelevante."""
+    candidatos_stat = {stat_key: [] for stat_key in STATS_JUGADOR}
+    candidatos_dd, candidatos_td = [], []
+
+    for team_id, team_name in equipos:
+        for perfil in jugadores_del_equipo(team_id, season):
+            for stat_key in STATS_JUGADOR:
+                datos = perfil["props"].get(stat_key)
+                if datos is not None and datos["promedio"] >= PROMEDIO_MINIMO_STAT[stat_key]:
+                    candidatos_stat[stat_key].append(
+                        {"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": datos["overPct"], **datos}
+                    )
+            if perfil["doubleDoublePct"] > 0:
+                candidatos_dd.append({"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": perfil["doubleDoublePct"]})
+            if perfil["tripleDoublePct"] > 0:
+                candidatos_td.append({"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": perfil["tripleDoublePct"]})
+
+    def _filtrar(candidatos: list[dict]) -> list[dict]:
+        calificados = [c for c in candidatos if c["probabilidad"] >= UMBRAL_PICK_PARTIDO]
+        calificados.sort(key=lambda c: c["probabilidad"], reverse=True)
+        return calificados[:MAX_PICKS_POR_STAT]
+
+    picks = {stat_key: _filtrar(candidatos_stat[stat_key]) for stat_key in STATS_JUGADOR}
+    picks["doble_doble"] = _filtrar(candidatos_dd)
+    picks["triple_doble"] = _filtrar(candidatos_td)
+    return picks
+
+
 def elegir_top_props_jugador(perfil: dict, top: int = 3) -> list[dict]:
     """Selecciones (stat + línea + % estimado) de un jugador, ordenadas de
     mayor a menor probabilidad y filtradas por UMBRAL_MOSTRAR_JUGADOR."""
