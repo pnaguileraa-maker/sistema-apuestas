@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from analizar_basquet import pronostico_partido
 from analizar_jugadores_basquet import elegir_top_props_jugador, perfil_jugador_nba
 from cargar_temporada_nba import temporada_actual_nba
+from lesionados_nba import obtener_lesionados
 
 load_dotenv()
 
@@ -106,7 +107,7 @@ def partidos_de_manana() -> tuple[list[dict], str, int]:
     return partidos[:MAX_PARTIDOS], manana, season
 
 
-def construir_bloque_partido(partido: dict, season: int) -> str:
+def construir_bloque_partido(partido: dict, season: int, lesionados: dict) -> str:
     pronostico = partido["pronostico"]
     lineas = [f"🏀 *{partido['home']} vs {partido['away']}*"]
 
@@ -122,15 +123,24 @@ def construir_bloque_partido(partido: dict, season: int) -> str:
         f"   • 📊 Más de {pronostico['puntosTotales']['linea']} puntos totales — *{pronostico['puntosTotales']['overPct']:.0f}%*"
     )
 
-    for team_id in (partido["homeId"], partido["awayId"]):
+    for team_id, team_name in ((partido["homeId"], partido["home"]), (partido["awayId"], partido["away"])):
+        bajas_equipo = lesionados.get(team_name, [])
+        jugadores_out = {b["jugador"] for b in bajas_equipo if b["estado"] == "Out"}
+
         for jugador in jugadores_destacados(team_id, season, JUGADORES_DESTACADOS_POR_EQUIPO):
+            if jugador["nombre"] in jugadores_out:
+                continue  # está confirmado afuera: la prop no tiene sentido mostrarla
             props_texto = ", ".join(f"{p['etiqueta']} ({p['probabilidad']:.0f}%)" for p in jugador["props"])
             lineas.append(f"   • 🧑‍💼 {jugador['nombre']}: {props_texto}")
+
+        if bajas_equipo:
+            texto_bajas = ", ".join(f"{b['jugador']} ({b['estado']})" for b in bajas_equipo)
+            lineas.append(f"   • 🚑 Bajas {team_name}: {texto_bajas}")
 
     return "\n".join(lineas)
 
 
-def construir_mensajes(partidos: list[dict], fecha_manana: str, season: int) -> list[str]:
+def construir_mensajes(partidos: list[dict], fecha_manana: str, season: int, lesionados: dict) -> list[str]:
     encabezado = f"🏀 *Pronósticos NBA para mañana* 🏀\n🗓️ {formatear_fecha(fecha_manana)}\n"
 
     if not partidos:
@@ -139,7 +149,7 @@ def construir_mensajes(partidos: list[dict], fecha_manana: str, season: int) -> 
     mensajes = []
     actual = encabezado
     for partido in partidos:
-        bloque = "\n\n" + construir_bloque_partido(partido, season)
+        bloque = "\n\n" + construir_bloque_partido(partido, season, lesionados)
         if len(actual) + len(bloque) > LIMITE_CARACTERES_MENSAJE:
             mensajes.append(actual)
             actual = "🏀 *Pronósticos NBA (continuación)*" + bloque
@@ -163,7 +173,8 @@ def enviar_mensaje_telegram(texto: str) -> None:
 
 def main() -> None:
     partidos, fecha_manana, season = partidos_de_manana()
-    for mensaje in construir_mensajes(partidos, fecha_manana, season):
+    lesionados = obtener_lesionados()
+    for mensaje in construir_mensajes(partidos, fecha_manana, season, lesionados):
         enviar_mensaje_telegram(mensaje)
 
 
