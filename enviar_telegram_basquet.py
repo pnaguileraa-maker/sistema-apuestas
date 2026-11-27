@@ -1,7 +1,7 @@
 """
-Envía por Telegram, cada noche, el reporte de pronósticos NBA (moneyline,
-puntos totales, tablas de jugadores por indicador y lesionados) de los
-partidos de MAÑANA.
+Envía por Telegram, cada tarde/noche antes de que empiecen, el reporte de
+pronósticos NBA (moneyline, puntos totales, tablas de jugadores por
+indicador y lesionados) de los partidos de HOY.
 
 Mensaje SEPARADO del reporte de fútbol (enviar_telegram.py) — mismo bot y
 chat, pero un envío aparte, para no mezclar ambos deportes en un solo texto.
@@ -66,9 +66,17 @@ def _apodo(nombre_equipo: str) -> str:
     return nombre_equipo.split()[-1]
 
 
-def partidos_de_manana() -> tuple[list[dict], str, int]:
+def partidos_de_hoy() -> tuple[list[dict], str, int]:
+    """Partidos de HOY (el día real en que se juegan, para quien lee el
+    reporte). La API agrupa los partidos nocturnos de EEUU bajo el día
+    calendario UTC siguiente (7pm ET = medianoche UTC del día de mañana),
+    así que la consulta interna usa esa fecha "de mañana" en UTC — pero
+    para el humano que lee el mensaje a las 19:00 Chile, esos partidos son
+    los de HOY a la noche, no los de mañana. Por eso se devuelve
+    date.today() como fecha real a mostrar, no la fecha usada en la query."""
     season = temporada_actual_nba()
-    manana = (date.today() + timedelta(days=1)).isoformat()
+    hoy = date.today().isoformat()
+    bucket_utc_partidos_de_hoy = (date.today() + timedelta(days=1)).isoformat()
 
     conn = sqlite3.connect("apuestas.db")
     filas = conn.execute(
@@ -80,7 +88,7 @@ def partidos_de_manana() -> tuple[list[dict], str, int]:
         WHERE g.season = ? AND date(g.date) = ? AND g.home_points IS NULL
           AND g.status != 'Cancelled'
         """,
-        (season, manana),
+        (season, bucket_utc_partidos_de_hoy),
     ).fetchall()
     conn.close()
 
@@ -99,7 +107,7 @@ def partidos_de_manana() -> tuple[list[dict], str, int]:
             }
         )
 
-    return partidos[:MAX_PARTIDOS], manana, season
+    return partidos[:MAX_PARTIDOS], hoy, season
 
 
 def _clave_orden_partido(partido: dict) -> float:
@@ -110,7 +118,7 @@ def _clave_orden_partido(partido: dict) -> float:
 
 
 def construir_resumen_partidos(partidos: list[dict]) -> str:
-    lineas = ["*Partidos de mañana (de mayor a menor probabilidad)*"]
+    lineas = ["*Partidos de hoy (de mayor a menor probabilidad)*"]
     for indice, partido in enumerate(partidos, start=1):
         pronostico = partido["pronostico"]
         if pronostico["moneyline"] is not None:
@@ -127,7 +135,7 @@ def construir_resumen_partidos(partidos: list[dict]) -> str:
 
 def construir_pool_jugadores(partidos: list[dict], season: int) -> list[dict]:
     """Perfil de TODOS los jugadores con muestra suficiente de los equipos
-    que juegan mañana (no solo los "destacados"), para armar las tablas de
+    que juegan hoy (no solo los "destacados"), para armar las tablas de
     indicadores sobre el universo completo de la jornada."""
     conn = sqlite3.connect("apuestas.db")
     pool = []
@@ -245,11 +253,11 @@ def construir_absorciones(partidos: list[dict], lesionados: dict, season: int) -
     return "⚠️ *Posible absorción de puntos por lesión*\n" + "\n".join(lineas)
 
 
-def construir_mensajes(partidos: list[dict], fecha_manana: str, season: int, lesionados: dict) -> list[str]:
-    encabezado = f"🏀 *Pronósticos NBA para mañana* 🏀\n🗓️ {formatear_fecha(fecha_manana)}\n"
+def construir_mensajes(partidos: list[dict], fecha_hoy: str, season: int, lesionados: dict) -> list[str]:
+    encabezado = f"🏀 *Pronósticos NBA de hoy* 🏀\n🗓️ {formatear_fecha(fecha_hoy)}\n"
 
     if not partidos:
-        return [encabezado + "\nNo encontramos partidos NBA con datos suficientes para mañana. 📭"]
+        return [encabezado + "\nNo encontramos partidos NBA con datos suficientes para hoy. 📭"]
 
     partidos = sorted(partidos, key=_clave_orden_partido, reverse=True)
     pool = construir_pool_jugadores(partidos, season)
@@ -298,9 +306,9 @@ def enviar_mensaje_telegram(texto: str) -> None:
 
 
 def main() -> None:
-    partidos, fecha_manana, season = partidos_de_manana()
+    partidos, fecha_hoy, season = partidos_de_hoy()
     lesionados = obtener_lesionados()
-    for mensaje in construir_mensajes(partidos, fecha_manana, season, lesionados):
+    for mensaje in construir_mensajes(partidos, fecha_hoy, season, lesionados):
         enviar_mensaje_telegram(mensaje)
 
 
