@@ -106,23 +106,26 @@ def pronostico_partido(home_id: int, away_id: int, season: int) -> dict | None:
 
 
 def mejor_pick_equipo(pronostico: dict) -> dict | None:
-    """Decisión de analista: un solo pick de equipo por partido. Si algún
-    equipo es favorito real (moneyline >= UMBRAL_MONEYLINE_CONFIABLE), se
-    apuesta a su victoria; si el partido está parejo (ningún equipo llega
-    al umbral), se prefiere la diferencia de puntos del más competitivo de
-    los dos — más fácil de acertar en un partido reñido que elegir
-    ganador. None si ni el moneyline ni el margen dan una señal real (ej.
-    diferencia de puntos ~0) — mejor no mostrar un pick que no vale nada."""
+    """Decisión de analista: UN equipo recomendado por partido, con AMBOS
+    números siempre (moneyline y diferencia de puntos/hándicap) — no solo
+    el que motivó la elección. "tipo" indica cuál de los dos fue el
+    criterio: si algún equipo es favorito real (moneyline >=
+    UMBRAL_MONEYLINE_CONFIABLE) se prioriza esa lectura; si el partido
+    está parejo (ningún equipo llega al umbral) se elige por la diferencia
+    de puntos del más competitivo de los dos. None si ni el moneyline ni
+    el margen dan una señal real (partido ~parejo en todo sentido)."""
     home, away = pronostico["home"], pronostico["away"]
     mejor_moneyline = home if home["moneyline"] >= away["moneyline"] else away
 
     if mejor_moneyline["moneyline"] >= UMBRAL_MONEYLINE_CONFIABLE:
-        return {"tipo": "moneyline", "equipo": mejor_moneyline["nombre"], "valor": mejor_moneyline["moneyline"]}
+        elegido, tipo = mejor_moneyline, "moneyline"
+    else:
+        elegido = home if home["margen"] >= away["margen"] else away
+        tipo = "margen"
+        if abs(elegido["margen"]) < MARGEN_MINIMO_CONFIABLE:
+            return None
 
-    mejor_margen = home if home["margen"] >= away["margen"] else away
-    if abs(mejor_margen["margen"]) < MARGEN_MINIMO_CONFIABLE:
-        return None
-    return {"tipo": "margen", "equipo": mejor_margen["nombre"], "valor": mejor_margen["margen"]}
+    return {"tipo": tipo, "equipo": elegido["nombre"], "moneyline": elegido["moneyline"], "margen": elegido["margen"]}
 
 
 def analizar_candidatos_moneyline(season: int) -> None:

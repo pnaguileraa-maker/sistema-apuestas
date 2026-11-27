@@ -107,7 +107,7 @@ def jugadores_del_equipo(team_id: int, season: int) -> list[dict]:
 
 
 UMBRAL_PICK_PARTIDO = 55.0  # % mínimo para que un jugador cuente como pick seguro de un indicador
-MAX_PICKS_POR_STAT = 4  # tope por indicador para no listar a todo el plantel que raspa el umbral
+MAX_PICKS_POR_STAT = 5  # tope por indicador para no listar a todo el plantel que raspa el umbral
 
 # Promedio mínimo para que el indicador sea relevante — sin esto, un
 # suplente que promedia 1.7 puntos "supera el 70%" una línea de 1.0, lo
@@ -178,14 +178,23 @@ def mejores_picks_partido(equipos: list[tuple[int, str]], season: int, lesionado
             if perfil["tripleDoublePct"] > 0:
                 candidatos_td.append({"jugador": perfil["playerName"], "equipo": team_name, "probabilidad": perfil["tripleDoublePct"], **alerta})
 
-    def _filtrar(candidatos: list[dict]) -> list[dict]:
+    def _filtrar(candidatos: list[dict], clave_orden: str) -> list[dict]:
         calificados = [c for c in candidatos if c["probabilidad"] >= UMBRAL_PICK_PARTIDO]
-        calificados.sort(key=lambda c: c["probabilidad"], reverse=True)
+        # Para las 4 stats numéricas se ordena por PROMEDIO (producción
+        # real), no por probabilidad — si no, un suplente con una línea
+        # conservadora (alta probabilidad pero poco volumen) desplaza a
+        # una estrella como Doncic o Wembanyama, que aun superando el
+        # umbral quedan con una probabilidad más ajustada que la de un
+        # rol menor. El umbral de probabilidad ya filtró que sea un pick
+        # "seguro"; una vez pasado ese filtro, lo relevante es cuánto
+        # produce. Doble-doble/triple-doble no tienen "promedio" propio,
+        # ahí sigue siendo la probabilidad.
+        calificados.sort(key=lambda c: c[clave_orden], reverse=True)
         return calificados[:MAX_PICKS_POR_STAT]
 
-    picks = {stat_key: _filtrar(candidatos_stat[stat_key]) for stat_key in STATS_JUGADOR}
-    picks["doble_doble"] = _filtrar(candidatos_dd)
-    picks["triple_doble"] = _filtrar(candidatos_td)
+    picks = {stat_key: _filtrar(candidatos_stat[stat_key], "promedio") for stat_key in STATS_JUGADOR}
+    picks["doble_doble"] = _filtrar(candidatos_dd, "probabilidad")
+    picks["triple_doble"] = _filtrar(candidatos_td, "probabilidad")
     return picks
 
 
@@ -280,6 +289,75 @@ def companeros_que_podrian_absorber(
 
     resultado.sort(key=lambda r: r["diferencia"], reverse=True)
     return resultado
+
+
+# Diferencia mínima (en la stat correspondiente) para que valga la pena
+# avisar que un compañero podría absorber esa parte del juego del
+# ausente — valores más chicos que para puntos porque rebotes/asistencias
+# tienen escalas menores (ganar 2 rebotes de más es tan relevante como
+# ganar 3-4 puntos).
+DIFERENCIA_MINIMA_ABSORCION_STAT = {
+    "points": 3.0,
+    "rebounds_tot": 2.0,
+    "assists": 1.5,
+    "three_made": 0.5,
+}
+
+
+def _resolver_jugador_id(team_id: int, nombre: str) -> int | None:
+    """Busca el id del jugador por nombre exacto; si falla, por apellido
+    (primer token) cuando es único en el equipo — cubre apodos como
+    "Anunoby OG" (ESPN) vs "Anunoby Ogugua" (nuestra base, de
+    API-Basketball)."""
+    conn = sqlite3.connect("apuestas.db")
+    fila = conn.execute("SELECT id FROM nba_players WHERE team_id = ? AND name = ?", (team_id, nombre)).fetchone()
+    if fila is not None:
+        conn.close()
+        return fila[0]
+
+    apellido = nombre.split()[0]
+    candidatos = conn.execute(
+        "SELECT id FROM nba_players WHERE team_id = ? AND name LIKE ?", (team_id, f"{apellido}%")
+    ).fetchall()
+    conn.close()
+    return candidatos[0][0] if len(candidatos) == 1 else None
+
+
+def analizar_impacto_baja(team_id: int, team_name: str, jugador_nombre: str, season: int) -> dict | None:
+    """Para un jugador confirmado "Out": qué aportaba de verdad (su propio
+    perfil, solo en las categorías donde tenía producción real — ver
+    PROMEDIO_MINIMO_STAT) y, para CADA una de esas categorías, el
+    compañero cuyo promedio ahí sube más cuando él no juega esta
+    temporada (no solo puntos: puede ser la pieza clave en rebotes o
+    asistencias y no en anotación). None si no se pudo identificar al
+    jugador en nuestra base o no tiene muestra suficiente."""
+    jugador_id = _resolver_jugador_id(team_id, jugador_nombre)
+    if jugador_id is None:
+        return None
+
+    perfil = perfil_jugador_nba(jugador_id, season)
+    if perfil is None:
+        return None
+
+    impactos = []
+    for stat_key in STATS_JUGADOR:
+        datos_propios = perfil["props"].get(stat_key)
+        if datos_propios is None or datos_propios["promedio"] < PROMEDIO_MINIMO_STAT[stat_key]:
+            continue  # no era una pieza clave en este indicador
+
+        candidatos = companeros_que_podrian_absorber(team_id, jugador_id, season, stat=stat_key)
+        candidatos = [c for c in candidatos if c["diferencia"] >= DIFERENCIA_MINIMA_ABSORCION_STAT[stat_key]]
+        if candidatos:
+            impactos.append(
+                {
+                    "stat": stat_key,
+                    "etiqueta": STATS_JUGADOR[stat_key],
+                    "propioPromedio": datos_propios["promedio"],
+                    "companero": candidatos[0],
+                }
+            )
+
+    return {"jugador": jugador_nombre, "equipo": team_name, "propioPromedios": perfil["props"], "impactos": impactos}
 
 
 def analizar_candidatos_jugadores(season: int) -> None:
