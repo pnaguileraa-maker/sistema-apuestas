@@ -21,7 +21,8 @@ Ejecutar manualmente:
 import os
 import sqlite3
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import requests
 from dotenv import load_dotenv
@@ -36,7 +37,7 @@ BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 TELEGRAM_API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-MAX_PARTIDOS = 10
+ZONA_NBA = ZoneInfo("America/New_York")
 
 DIAS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 MESES_ES = [
@@ -51,35 +52,43 @@ def formatear_fecha(fecha_iso: str) -> str:
 
 
 def partidos_de_hoy() -> tuple[list[dict], str, int]:
-    """Partidos de HOY (el día real en que se juegan, para quien lee el
-    reporte). La API agrupa los partidos nocturnos de EEUU bajo el día
-    calendario UTC siguiente (7pm ET = medianoche UTC del día de mañana),
-    así que la consulta interna usa esa fecha "de mañana" en UTC — pero
-    para el humano que lee el mensaje a las 19:00 Chile, esos partidos son
-    los de HOY a la noche, no los de mañana. Por eso se devuelve
-    date.today() como fecha real a mostrar, no la fecha usada en la query."""
+    """Partidos de la jornada NBA de HOY: todos los que empiezan hoy según
+    la hora del Este de EEUU (la fecha oficial de cada partido para la NBA).
+    Así entran tanto los de la tarde (ej. 17:00 ET = 19:00 Chile) como los
+    de la madrugada en Chile (22:30 ET = 00:30 Chile del día siguiente),
+    sin colar los de mañana.
+
+    Antes se filtraba por el día calendario UTC de mañana: eso dejaba
+    afuera los partidos que empiezan antes de las 00:00 UTC y metía los de
+    la tarde del día siguiente."""
     season = temporada_actual_nba()
-    hoy = date.today().isoformat()
-    bucket_utc_partidos_de_hoy = (date.today() + timedelta(days=1)).isoformat()
+    hoy_et = datetime.now(ZONA_NBA).date()
+    hoy = hoy_et.isoformat()
 
     conn = sqlite3.connect("apuestas.db")
     filas = conn.execute(
         """
-        SELECT g.id, g.home_team_id, h.name, g.away_team_id, a.name
+        SELECT g.id, g.date, g.home_team_id, h.name, g.away_team_id, a.name
         FROM nba_games g
         JOIN nba_teams h ON h.id = g.home_team_id
         JOIN nba_teams a ON a.id = g.away_team_id
-        WHERE g.season = ? AND date(g.date) = ? AND g.home_points IS NULL
-          AND g.status != 'Cancelled'
+        WHERE g.season = ? AND date(g.date) BETWEEN ? AND ?
+          AND g.home_points IS NULL AND g.status != 'Cancelled'
         """,
-        (season, bucket_utc_partidos_de_hoy),
+        (season, hoy, (hoy_et + timedelta(days=1)).isoformat()),
     ).fetchall()
     conn.close()
+    filas = [
+        (game_id, home_id, home_name, away_id, away_name)
+        for game_id, fecha, home_id, home_name, away_id, away_name in filas
+        if datetime.fromisoformat(fecha).astimezone(ZONA_NBA).date() == hoy_et
+    ]
 
     partidos = []
     for _game_id, home_id, home_name, away_id, away_name in filas:
         pronostico = pronostico_partido(home_id, away_id, season)
         if pronostico is None:
+            print(f"Sin pronóstico (faltan datos): {away_name} @ {home_name}")
             continue
         partidos.append(
             {
@@ -92,7 +101,7 @@ def partidos_de_hoy() -> tuple[list[dict], str, int]:
         )
 
     partidos.sort(key=lambda p: max(p["pronostico"]["home"]["moneyline"], p["pronostico"]["away"]["moneyline"]), reverse=True)
-    return partidos[:MAX_PARTIDOS], hoy, season
+    return partidos, hoy, season
 
 
 def enviar_documento_telegram(ruta_archivo: str, caption: str = "") -> None:
